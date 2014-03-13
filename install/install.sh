@@ -191,7 +191,7 @@ echo
 MANIN=0
 if [ -f /etc/manpath.config ]; then
 	for path in `grep ^MANDATORY_MANPATH /etc/manpath.config | grep /usr/local/ | awk {print'$2'}`; do
-		if [ -d "$path" ]; then
+		if [ -d "$path/man1/" ]; then
 			cp main/man/*.gz ${path}/man1/
 			MANIN=1
 			MANPATH=$path
@@ -200,7 +200,7 @@ if [ -f /etc/manpath.config ]; then
 	done
 else
 	for path in `echo $MANPATH | sed -e 's/:/ /g'`; do
-		if [ -d "$path" ]; then
+		if [ -d "$path/man1" ]; then
 			cp main/man/*.gz ${path}/man1/
 			MANIN=1
 			MANPATH=$path
@@ -211,6 +211,7 @@ fi
 if [ $MANIN -eq 0 ]; then
 	# Force install
 	path=/usr/share/man
+	mkdir -p /usr/share/man/man1
 	cp main/man/*.gz ${path}/man1/
 	[ $? -eq 0 ] && MANIN=1 && MANPATH=$path
 fi
