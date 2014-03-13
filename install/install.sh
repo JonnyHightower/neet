@@ -178,6 +178,7 @@ done
 
 # Somewhere for the documentation to go
 mkdir ${NEET}/doc
+cp ../doc/*.html ${NEET}/doc
 
 # Public packages
 PPKG=Net-PcapUtils-0.01
