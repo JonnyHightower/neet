@@ -1,0 +1,15 @@
+nmap=/usr/bin/nmap
+amap=/usr/local/bin/amap
+tcptraceroute=/usr/sbin/tcptraceroute
+openvas-nasl=/usr/bin/openvas-nasl
+hydra=/usr/bin/hydra
+medusa=/usr/bin/medusa
+wget=/usr/bin/wget
+sslscan=/usr/bin/sslscan
+dig=/usr/bin/dig
+rpcclient=/usr/bin/rpcclient
+net=/usr/bin/net
+snmpwalk=/usr/bin/snmpwalk
+ruby=/usr/bin/ruby
+java=/usr/bin/java
+ldapsearch=/usr/bin/ldapsearch

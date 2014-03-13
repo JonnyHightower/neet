@@ -1,0 +1,14 @@
+# Service map file for neet
+# Maps nmap/amap service identification to service names
+# Format is nmap/amap service name, then a single space, then our "friendly" name
+
+microsoft-rdp TerminalServices
+ms-term-serv TerminalServices
+ms-wbt-server TerminalServices
+oracle-tns Oracle
+ms-sql-s MS-SQL
+globalcatLDAPssl GlobalCatalogSSL
+globalcatLDAP GlobalCatalog
+netbios-ssn SMB
+
+

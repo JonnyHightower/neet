@@ -1,0 +1,118 @@
+::Nmap:critical
+ Nmap is the core port-scanning engine and as such, it is a critical component.
+
+::Nmap:recommended
+ Nmap performs a number of important tasks, such as service identification and
+ a number of vulnerability checks. It is important to have the latest version
+ detection fingerprints and scripting engine in order to get the best out of
+ Neet.
+
+::TCPTraceroute:recommended
+ TCPTraceroute is used by the topology scanning module.
+
+::Amap:recommended
+ Amap is used to identify services which the Nmap service identification module
+ has failed to identify accurately.
+
+::OpenVAS-LIBNASL:recommended
+ OpenVAS NASL is an open-source project which forked from the Nessus 2 development
+ when Nessus 3.x ceased to be open source. Whilst the Neet discovery engine is not 
+ intended to replace vulnerability scanners such as Nessus, it uses OpenVAS LIBNASL
+ to determine the presence of serious vulnerabilities which Neet is capable of
+ exploiting.
+
+::Hydra:recommended
+ THC Hydra is used for brute-force-guessing passwords for a number of authentication
+ mechanisms, including MySQL, MSSQL, Windows and SSH.
+
+::Bannergrab:recommended
+ Bannergrab is used to obtain banner information from remote services. The discovery
+ engine compares this banner information with known signatures in order to determine
+ which services are listening on open ports.
+
+::Dig:recommended
+ Dig is a powerful tool for investigating DNS.
+
+::RPCClient:recommended
+ RPCClient is a part of the Samba suite, and is a tool for executing client-side
+ RPC functions. It is used extensively by the discovery engine to enumerate data
+ from Windows and Samba servers.
+
+::Net:recommended
+ Net is a part of the Samba suite, and is used extensively by the discovery
+ engine to interact with Windows and Samba servers.
+
+::Net-SNMP:recommended
+ Net-SNMP is used by the discovery engine to enumerate SNMP data from servers.
+ The discovery engine will not be able to dump SNMP MIBs without this tool set.
+
+::Ruby:recommended
+ Ruby is a dynamic, open source programming language with a focus on simplicity
+ and productivity. It is used by the Metasploit Framework, which is used by the
+ exploitation module of the Pentest Power Console.
+
+::Net-ARP:recommended
+ Net::ARP is used by fwdetect to determine which interfaces will forward packets. It
+ can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
+ command-line tool will fetch the module and any of its dependencies for you directly
+ from the CPAN if you have Internet access.
+
+::Net-RawIP:recommended
+ Net::RawIP is used by fwdetect to determine which interfaces will forward packets. It
+ can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
+ command-line tool will fetch the module and any of its dependencies for you directly
+ from the CPAN if you have Internet access.
+
+::DBD-Sybase:recommended
+ DBD-Sybase is used by Neet to create a Windows shell when connected to MS-SQL databases.
+ It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
+ command-line tool will fetch the module and any of its dependencies for you directly
+ from the CPAN if you have Internet access.
+
+::DBI:recommended
+ DBI is used by Neet to create a Windows shell when connected to MS-SQL databases.
+ It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
+ command-line tool will fetch the module and any of its dependencies for you directly
+ from the CPAN if you have Internet access.
+
+::NetAddr-IP:critical
+ NetAddr::IP is used by the discovery engine to determine which interface is 
+ appropriate to use to route to each target. It is also used to perform address range
+ conversions. The discovery engine will not work without this core module.
+ It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
+ command-line tool will fetch the module and any of its dependencies for you directly
+ from the CPAN if you have Internet access.
+
+::Net-Pcap:recommended
+ This module is required by the Net::PcapUtils module.
+ It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
+ command-line tool will fetch the module and any of its dependencies for you directly
+ from the CPAN if you have Internet access.
+
+::Net-PcapUtils:recommended
+ This module is required by fwdetect to determine which interfaces will forward packets.
+ It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
+ command-line tool will fetch the module and any of its dependencies for you directly
+ from the CPAN if you have Internet access.
+
+::Term-ReadKey:critical
+ This module is required to provide user interaction.
+
+::XML-Parser:critical
+ This module is required to parse the results of some test tools, including nmap.
+ It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
+ command-line tool will fetch the module and any of its dependencies for you directly
+ from the CPAN if you have Internet access.
+
+::XML-Twig:critical
+ This module is require to parse the results of some test tools, including nmap.
+ It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
+ command-line tool will fetch the module and any of its dependencies for you directly
+ from the CPAN if you have Internet access.
+
+::IO-Socket-SSL:recommended
+ This module is required for testing of some services which are accessed through SSL.
+ It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
+ command-line tool will fetch the module and any of its dependencies for you directly
+ from the CPAN if you have Internet access.
+

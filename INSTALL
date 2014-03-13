@@ -1,0 +1,36 @@
+A quick note: Neet runs on Linux, and is unlikely to work on other operating
+systems - I've never tested it on anything else. It most definitely won't work
+on Windows, and it's unlikely to work under Cygwin. If you normally use
+another OS, just grab yourself a Kali Linux ISO and build yourself a Kali VM
+in which to install Neet. It will make life far easier.
+
+Neet has a significant number of dependencies, largely thanks to the modules
+which test various services. However, the installer takes care of most of
+the dependency checking for you - if you have missing dependencies then 
+these will be listed so you can get them from source or using your package
+manager of choice.
+
+Missing critical dependencies will stop the installation. You can redo the
+installation once you have satisfied the critical requirements.
+
+Recommended dependencies will trigger warnings if they are missing, and
+they may well break some functionality, but Neet will continue to function.
+These will not stop installation, but will be listed in a text file for
+you to resolve.
+
+  ** IMPORTANT **
+  If you have installed neet and there are unresolved dependencies, run
+  /opt/neet/bin/updateLocations once you have resolved them. This will
+  ensure that the functionality for which they are required will be
+  configured to use them.
+
+Having said all that, installation of Neet is pretty simple on most
+modern distributions, and if you use Kali or Backtrack, the installer
+will pre-fetch certain dependencies for you as long as you have a 
+working Internet connection that your package manager can use. In these
+cases installation is an extremely simple process.
+
+In all cases, start the installation process by changing into the
+"install" directory and running "./install.sh" as root. 
+
+

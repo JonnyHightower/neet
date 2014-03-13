@@ -1,0 +1,250 @@
+#!/usr/bin/perl -w
+
+##########################################################################
+#
+#    Neet: Network discovery, enumeration and security assessment tool
+#    Copyright (C) 2008-2014 Jonathan Roach
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#    Contact: jonnyhightower [at] funkygeek.com
+#
+##########################################################################
+
+use strict;
+use NetAddr::IP;
+use Net::PcapUtils;
+use Net::RawIP;
+use Net::ARP;
+use NetPacket::Ethernet;
+use NetPacket::IP;
+
+# The purpose of this script is to test whether or not an IP interface is configured to forward IP packets. This is useful in identifying potential routes out of a network.
+# We do this by sending an IP packet to the interface under test, destined for our IP address, but the target MAC address. The SRC IP and MAC addresses should be unimportant
+# as we aren't using ARP packets and no cache poisoning should take place.
+
+# If the device is NOT forwarding packets, it should just ignore them. If it IS forwarding, then it should forward it back to us. We can identify our packets by the payload.
+# Exits with value of 1 if the host is NOT forwarding, or with 0 if it IS forwarding.
+
+# By Jonathan Roach: jonny.hightower at gmail.com.
+
+my $host=$ARGV[0];
+my $argQuiet=$ARGV[1];
+my $notForwarding=1;
+my $quiet=0;
+
+if ($argQuiet && ("$argQuiet" eq "-q")){
+	$quiet=1;
+}
+
+die ("Usage: $0 <host> [-q]\n") if (!$host);
+
+if ($host !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/){
+	die ("Invalid IP address: $host\n");
+}
+
+my @octets=split "\\.", $host;
+for my $o (@octets){
+	if ($o > 255){
+	die ("Invalid IP address: $host\n");
+	}
+}
+
+my %data;
+my $timeout=3; # Seconds - for waiting for ARP reply, and for waiting for the IP packet reply
+my $payload="JR's Interface Routing Test!!";
+
+for my $interface (`/sbin/ifconfig -a | grep Ethernet`){
+	chomp $interface;
+	my $name=$interface; $name =~ s/^(\S+)\s[\s\S]+/$1/;
+	my $mac=$interface; $mac =~ s/^[\S\s]+HWaddr\s(\w\w:\w\w:\w\w:\w\w:\w\w:\w\w)\s+/$1/; $mac=lc($mac);
+	my $ipconfig=`/sbin/ifconfig $name | grep inet`;
+	my $ip=$ipconfig; $ip =~ s/[\s\S]+addr:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})[\s\S]+/$1/;
+	next if (!$ip);
+	my $mask=$ipconfig; $mask =~ s/[\s\S]+Mask:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})[\s\S]+/$1/;
+	my $bcast=$ipconfig; $bcast =~ s/[\s\S]+Bcast:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})[\s\S]+/$1/;
+	$data{'int'}{$name}{'mac'}=$mac;
+	$data{'int'}{$name}{'ip'}=$ip;
+	$data{'int'}{$name}{'mask'}=$mask;
+	$data{'int'}{$name}{'bcast'}=$bcast;
+}
+
+for my $interface (keys(%{$data{'int'}})){
+	my $intobj=NetAddr::IP->new($data{'int'}{$interface}{'ip'},$data{'int'}{$interface}{'mask'});
+	my $trgobj=NetAddr::IP->new($host);
+	if ($intobj->contains($trgobj)){
+		$data{$host}{'int'}=$interface;
+		last;
+	}
+}
+
+if (!$data{$host}{'int'}){
+	 print "Host $host is not on any of the locally connected network segments\n" if (!$quiet);
+	 exit 4;
+}
+
+# Now we need to calculate a Fake IP address from which to send the packets
+my $ourIP=$data{'int'}{$data{$host}{'int'}}{'ip'};
+my $ourMask=$data{'int'}{$data{$host}{'int'}}{'mask'};
+my $ourObj=NetAddr::IP->new($ourIP,$ourMask);
+my $network=$ourObj->network->addr;
+my $broadcast=$ourObj->broadcast->addr;
+
+my $fakeIP=$ourObj; $fakeIP = $fakeIP + 1;
+my $fake=$fakeIP->addr();
+if (!($fake ne $network && $fake ne $broadcast)){
+	$fakeIP=$ourObj; $fakeIP = $fakeIP - 1;
+	$fake=$fakeIP->addr();
+}
+
+# Set an alarm to terminate the pcap loops
+$SIG{'ALRM'}=sub {
+	die ("TIMEOUT");
+};
+
+# Set up listener to catch ARP replies
+my $pid=open(CHILD, "-|");
+if (!$pid){
+	my $mac=$data{'int'}{$data{$host}{'int'}}{'mac'}; $mac =~ s/://g;
+	Net::PcapUtils::loop(\&process_arp_pkt, 'FILTER' => 'arp', 'DEV' => $data{$host}{'int'}, 'USERDATA' =>"$mac $host");
+	exit;
+}
+
+# Set up another listener to catch IP replies
+my $pid2=open(CHILD2, "-|");
+if (!$pid2){
+	my $mac=$data{'int'}{$data{$host}{'int'}}{'mac'}; $mac =~ s/://g; 
+	Net::PcapUtils::loop(\&process_ip_pkt, 'FILTER' => 'ip', 'DEV' => $data{$host}{'int'}, 'USERDATA' =>"$mac $host");
+	exit;
+}
+
+# Wait for children to initialise
+sleep 1;
+
+print "* Acquiring MAC address\n" if (!$quiet);
+sendArpRequest($data{$host}{'int'},$data{'int'}{$data{$host}{'int'}}{'ip'},$data{'int'}{$data{$host}{'int'}}{'mac'},$host,"ff:ff:ff:ff:ff:ff");
+sendArpRequest($data{$host}{'int'},$data{'int'}{$data{$host}{'int'}}{'ip'},$data{'int'}{$data{$host}{'int'}}{'mac'},$host,"ff:ff:ff:ff:ff:ff");
+
+# Read the replies from the listener
+eval {
+	alarm $timeout;
+	while (my $reply=<CHILD>){
+		chomp $reply;
+			if ($reply =~ /^$host /){
+				$reply =~ s/\S+ (\w\w:\w\w:\w\w:\w\w:\w\w:\w\w)/$1/;
+				$data{$host}{'mac'}=$reply;
+			}
+		last if ($data{$host}{'mac'});
+	}
+	alarm 0;
+};
+
+if ("$@" =~ /^TIMEOUT/){
+	print "Failed to acquire MAC address for $host\n";
+	system("kill $pid");
+	system("kill $pid2");
+	exit 2;
+}
+
+# Now we have the MAC address, terminate the ARP listener.
+system("kill $pid");
+$pid=0;
+
+print "* Got MAC address $data{$host}{'mac'} for $host\n" if (!$quiet);
+
+# Now prepare the packet
+my $n = Net::RawIP->new ({
+		ip => {
+			'saddr' => $fake,
+			'daddr' => $data{'int'}{$data{$host}{'int'}}{'ip'}
+		},
+		generic => {
+			'data' => "$payload $host"
+		}
+																								});
+	$n->ethnew($data{$host}{'int'});
+	$n->ethset(source => '00:11:22:33:44:55', dest =>$data{$host}{'mac'});
+	print "* Sending IP packet\n" if (!$quiet);					
+	$n->ethsend;
+
+# Read the replies from the listener
+eval {
+	alarm $timeout;
+	while (my $reply=<CHILD2>){
+		chomp $reply;
+			if ($reply eq "GOTREPLY"){
+				print "$host is forwarding packets\n" if (!$quiet);
+				$notForwarding=0;
+				last;
+			}
+	}
+	alarm 0;
+};
+
+if ("$@" =~ /^TIMEOUT/){
+	print "$host is NOT forwarding packets\n" if (!$quiet);
+	$notForwarding=1;
+}
+
+$SIG{'ALRM'}='';
+
+# Terminate the IP listener.
+system("kill $pid2");
+
+exit $notForwarding;
+
+sub process_ip_pkt {
+		# This is processed by the listener, once for each ARP packet that is received
+    my ($data, $hdr, $pkt) = @_;
+		my ($ourMac,$target)=split " ", $data;
+    my $ethObj = NetPacket::Ethernet->decode($pkt);
+		my $dstMac=$ethObj->{dest_mac};
+		if ("$dstMac" eq "$ourMac"){
+			my $ipObj=NetPacket::IP->decode($pkt);
+			my $data=$ipObj->{data};
+			# STDOUT goes to the CHILD handle in the parent process because we used open() with a pipe to fork with IPC 
+			if ($data =~ /$payload $target$/){
+				print "GOTREPLY\n";
+			}
+		}
+}
+
+sub process_arp_pkt {
+		# This is processed by the listener, once for each ARP packet that is received
+    my ($data, $hdr, $pkt) = @_;
+		my ($ourMac,$target)=split " ", $data;
+    my $ethObj = NetPacket::Ethernet->decode($pkt);
+		my $dstMac=$ethObj->{dest_mac};
+		if ("$dstMac" eq "$ourMac"){
+			my $srcMac=$ethObj->{src_mac};
+			my $srcIP;
+			for my $a (0,1,2,3){
+				$srcIP .= ord(substr($pkt,(28+$a),1)) . ".";
+			}
+			chop $srcIP;
+			$srcMac=substr($srcMac,0,2) . ":" . substr($srcMac,2,2)  . ":" . substr($srcMac,4,2)  . ":" . substr($srcMac,6,2)  . ":" . substr($srcMac,8,2)  . ":" . substr($srcMac,10,2);
+			# STDOUT goes to the CHILD handle in the parent process because we used open() with a pipe to fork with IPC 
+			print "$srcIP $srcMac\n";
+		}
+}
+
+sub sendArpRequest {
+	my $dev=shift();
+	my $srcIP=shift();
+	my $srcMac=shift();
+	my $dstIP=shift();
+	my $dstMac=shift();
+	Net::ARP::send_packet($dev,$srcIP,$dstIP,$srcMac,$dstMac,'request');
+}
+

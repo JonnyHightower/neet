@@ -1,0 +1,73 @@
+#!/usr/bin/perl -w
+
+##########################################################################
+#
+#    Neet: Network discovery, enumeration and security assessment tool
+#    Copyright (C) 2008-2014 Jonathan Roach
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#    Contact: jonnyhightower [at] funkygeek.com
+#
+##########################################################################
+
+use strict;
+use File::Find;
+my (@_ports,%lookup);
+my $high=0;
+
+find(\&handleFile, ".");
+
+for my $port (@_ports){
+	if (!exists($lookup{$port})){
+		$lookup{$port} = 1;
+		if ($port > $high){
+			$high=$port;
+		}
+	}
+}
+
+for (my $port=0;$port<=$high;$port++){
+	if (exists($lookup{$port})){
+		print $port;
+		if ($port != $high){
+			print ",";
+	 } else {
+			print "\n";
+		}
+	}
+}
+
+sub handleFile {
+		# $File::Find::dir  is the current directory name,
+		# $_ is the current filename within that directory
+		# $File::Find::name is the complete pathname to the file.
+		return 0 if ( "$_" ne "tcpports.txt");
+		push @_ports, listPorts($_);
+}
+
+sub listPorts {
+	my $file=shift();
+	my @ports;
+	if (open(FH,$file)){
+		until (eof FH){
+			my $line=readline (*FH);
+			next if ($line !~ /^\d/);
+			$line =~ s/(^\d+)[\s\S]+\s/$1/;
+			push @ports, $line;
+		}
+		close FH;
+	}
+	return @ports;
+}

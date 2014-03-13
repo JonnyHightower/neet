@@ -1,0 +1,75 @@
+#!/usr/bin/perl -w
+
+##########################################################################
+#
+#    Neet: Network discovery, enumeration and security assessment tool
+#    Copyright (C) 2008-2014 Jonathan Roach
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#    Contact: jonnyhightower [at] funkygeek.com
+#
+##########################################################################
+
+use strict;
+use JR::iShell::iShellSQL;
+
+usage() if (!$ARGV[0]);
+
+my $Connector="NativeMSSQL";
+my $host=shift();
+my $password=shift();
+my $user=shift();
+my $shell;
+my $port=1433;
+
+if ($host =~ /:/){
+	($host,$port)=split (":", $host, 2);
+}
+
+$user="" if (!$user);
+$password="" if (!$password);
+
+if ("$user"){
+	$shell = JR::iShell::iShellSQL->new('Connector'=>"$Connector", 'Host'=>"$host", 'Port'=>"$port", 'Pass'=>"$password", 'User'=>"$user");
+} else {
+	$shell = JR::iShell::iShellSQL->new('Connector'=>"$Connector", 'Host'=>"$host", 'Port'=>"$port", 'Pass'=>"$password");
+}
+if ($shell){
+	print "Got shell\n";
+	print "OS: ". $shell->OS . "\n";
+	print "Time: " . $shell->ServerTime . "\n";
+	print "Server: " . $shell->Server . "\n";
+
+	$shell->prompt;
+	while (my $cmd=<STDIN>){
+		$shell->exec($cmd);
+		my @b=$shell->output;
+		for my $line (@b){
+			print "$line\n";
+		}
+		exit if (!$shell->prompt);
+	}
+
+} else {
+	print "No shell\n";
+}
+
+
+sub usage {
+	print "Usage: iShellSQL <HOST IP> <Password> [username]\n";
+	print "       iShellSQL gives a clean shell over a\n";
+	print "       native MSSQL connection\n";
+	exit 0;
+}

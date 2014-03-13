@@ -1,0 +1,39 @@
+# Service banner signatures for neet
+# Jonathan Roach
+# April 2006
+# Version
+
+# Format: SERVICE@SLICE@Trigger@Trigger-line-also-must-contain(optional)
+# You can have as many triggers as you like. They must be matched IN ORDER
+# for the service to be considered matched.
+
+# The SLICE is a bit of text that should match ONE line in the expected
+# banner. It is used for showing the banner in the appropriate service
+# file.
+
+# The slice and the triggers can contain regex expressions like ^ to mark
+# the start of a line. 
+
+DAAP@DAAP-Server: @^DAAP-Server: @
+HTTP@Server: @^HTTP/1.
+FTP@FTP@@^220@FTP
+SMTP@SMTP@^220@SMTP
+SSH@^SSH@^SSH-
+ICA@@..ICA.
+ICAP@@^ICAP/1.
+SSH@^SSH@^sshd2\[
+Chargen@@ABCDEFGHIJKLMNOPQRSTUVWXYZ
+Patrol@@^SDPACK
+PowerChute@^Server:@^Server:@Acme.Serve/v
+VNC@@^RFB 003.003\n
+MySQL@@....Bad.handshak@e
+SWAT@Server:@WWW-Authenticate: Basic@realm="SWAT"
+OpenView@server: BBC @^server: BBC @ovbbccb
+NNTP@NNTP@^200@NNTP
+BACKUPEXEC@@^80 00 00 24 00 00 00 01 44 10
+CUPS@Server: @Server: CUPS/
+CORBA@^GIOP@^GIOP
+SMB@OS=\[@OS=\[Windows @\] Server=\[
+SMB@OS=\[@OS=\[Unix\]@\] Server=\[Samba
+Finger@@Login\s@Idle\s
+

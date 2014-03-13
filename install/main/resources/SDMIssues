@@ -1,0 +1,46 @@
+# This file is a list of issues noticed, before even the GSMs run.
+# The file is split into two sections: the first part lists the issues themselves
+# If the first field isn't NEETSDMISSUE, then neet assumes it's the name of a real service. If the first field
+# IS NEETSDISSUE, then neet assumes it's an issue definition.
+
+# The fields are Asterisk separated, and are set out as follows:
+# NEETSDMISSUE*IssueReference*LogAs [issue/vuln/comp]*ISSUE TEXT
+
+# ISSUE TEXT can have replacement data dynamically inserted into it; the following markup is supported:
+# %PROTO%  - this will be replaced with the protocol on which the service was found
+# %PORT% - this will be replaced with the port number on which the service was found
+# %HOST% - this will be replaced with the host IP address on which the service was found
+# %SERVICE% - this will be replaced with the name of the service
+
+NEETSDMISSUE*SDM1*issue*The SSH server on host %HOST% port %PROTO%/%PORT% supports SSH protocol 1.
+NEETSDMISSUE*SDM2*issue*The SSH server on host %HOST% port %PROTO%/%PORT% supports only SSH protocol 1.
+NEETSDMISSUE*SDM3*issue*Host %HOST% is running a clear-text service (%SERVICE%) on port %PROTO%/%PORT%.
+NEETSDMISSUE*SDM4*issue*Host %HOST% potentially vulnerable to user enumeration on port %PROTO%/%PORT% (%SERVICE%).
+NEETSDMISSUE*SDM5*issue*Host %HOST% is running a seldom-used service (%SERVICE%) on port %PROTO%/%PORT%.
+NEETSDMISSUE*SDM6*issue*Host %HOST% is running the r-services %SERVICE% service on port %PROTO%/%PORT%.
+NEETSDMISSUE*SDM7*vuln*Host %HOST% is running the REXEC service on port %PROTO%/%PORT%. This is usually open to unauthenticated remote command execution.
+NEETSDMISSUE*SDM8*vuln*Host %HOST% is running a default Oracle 9i installation %PROTO%/%PORT%. This is vulnerable to a number of problems.
+
+# Haven't thought of what happens if a particular port is subject to more than one issue, such as Rusersd - 4 and 6
+
+# The next section of the file contains the services and banners that trigger the issues being written to the file.
+# Service (Neet translated name)*Vulnerable Banner String(If Applicable)*IssueReference (Corresponding to those above)
+
+SSH*SSH-1.99*1
+SSH*SSH-1.5*2
+Telnet**3
+FTP**3
+Finger**4
+Daytime**5
+Discard**5
+Echo**5
+Qotd**5
+Chargen**5
+NNTP**5
+Rlogin**6
+Login**6
+Shell**6
+Exec**6
+Rusersd**4
+Rexec**7
+HTTP*Oracle HTTP Server Powered by Apache/1.3.22 (Win32) mod_plsql/3.0.9.8.3b mod_ssl/2.8.5 OpenSSL/0.9.6b mod_fastcgi/2.2.12 mod_oprocmgr/1.0 mod_perl/1.25*8

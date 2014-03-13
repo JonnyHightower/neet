@@ -1,0 +1,231 @@
+*** Neet Shell Help version 0.9.9 ***
+
+================
+General commands
+================
+help	-> Print this help
+quit	-> Exit the neet shell environment
+addresses -> Creates a cross reference of hostnames against IP addresses. Each hostname will be listed
+             only once, and all corresponding IP addresses will be listed against the hosts. This is useful
+             when testing multiple VLANs where each host may appear more than once with a number of IP
+             addresses.
+netconfig -> Restore the network configuration for an interface from an ifconfig file. By default
+	     this will reset the specified interface to its configuration when neet was last run in the
+	     current directory. Use no argument for usage and a list of available interface configurations.
+
+=============================
+Logging commands (neet shell)
+=============================
+logoff	-> Disable logging
+logon	-> Enable logging (default)
+logfile	-> Specify the logfile
+
+=======================
+Logging commands (neet)
+=======================
+log			-> View the main neet log file. Pipe it to grep or less for best results.
+
+===============================================
+Commands for getting a broad view of the results
+===============================================
+
+Run these commands inside any directory, from the top-level results directory down
+
+	cli	-> Display the command line with which neet was called to do this scan
+	win	-> List Windows hosts (and Windows version if available)
+	unix	-> List Unix hosts (and flavour if available)
+	print	-> List Printers
+	cisco	-> List switches and routers
+	live	-> List all hosts found to be live
+	hostswithservices -> List all hosts found to be hosting services. Useful on remote tests.
+	comp	-> List all compromised machines (machines with remote vulnerabilities or guessed passwords)
+	vuln	-> List all vulnerabilities
+	lowissues -> List low-risk issues (not vulnerabilities or compromises)
+	issues -> List all issues including vulnerabilities and compromises
+	gw -> List all the gateways out of the network
+	snmp	-> List all hosts with SNMP (read or write). In host context, lists the MIB
+	shares -> List all SMB shares
+	smbenum -> Do a credentialled SMB enumeration against a target host
+	testshares -> Find anonymous SMB shares
+	exploreshares -> List contents of shares - requires authenticated access
+	browseshare -> Mount an SMB share and browse it
+	name	-> Displays the hostname for the specified IP address. Shortened unique addresses can be used.
+	ip		-> Opposite of name. Case insensitive.
+	svc	-> List services on the network or host. Specify a service name to list all instances of that service.
+	webs -> Loops through all HTTP/S services on the network, opening each sequentially with a web browser
+	msf2    -> runs msfcli version 2
+	msf    -> runs msfcli version 4
+	findport -> find all hosts with the specified port open.
+	tcpports -> comma-delimited list of all tcp ports open across the infrastructure
+	udpports -> comma-delimited list of all udp ports open across the infrastructure
+	nbnames -> Display a list of all NetBIOS names against IP addresses
+	dnsnames -> Display a list of all DNS names against IP addresses
+	domains -> Displays a list of Windows domains and their domain controllers (if info available)
+	hostmode [IP] -> Switch to host mode for the specified IP address if an alias hasn't been generated for it.
+                   Also can be run without an argument in a host directory to switch to that host.
+	multikatz -> If wincreds has been used to add credentials, then this will run mimikatz on all hosts for
+                    which the credentials work. Results for each host will be stored in its directory, and a
+                    copy of all passwords parsed into windows-credendials.txt in the top-level results directory.
+========================================
+Context Switching (not in the OS sense)
+========================================
+
+refresh	-> Refresh shell aliases and environment variables for short specification of host IP addresses.
+
+To switch to the context of a particular host, type the last unique octet(s) of the IP address. In a 
+class C network, this is the last octet. So to switch to 128.98.9.15 you would type 15. In a class B
+network, where more than one host has the last octet "15", you would type "9.15". On a class B where
+only one host has the last octet "15", you can type 15.
+
+When you are in host context, the host's IP address is available in the environment variable "\$IP".
+
+-	-> Switch to the last host you were working with. Ideal for toggling between two hosts.
+
+glo	-> Switch to a global view of the results. "\$IP" will be unset.
+..	-> Same as "glo"
+
+=========================================================
+Commands for connecting to services in global mode
+=========================================================
+
+	hashspray	-> Test all the hashes in the credentials file against all windows boxes. Use hashes only - no
+			   password cracking required.
+
+=========================================================
+Commands for connecting to services on a specific machine
+=========================================================
+
+Run these commands inside the working directory for the machine. Where neet has determined
+credentials for logging into the machine, these credentials will be displayed prior to the
+appropriate connection program being started.
+
+sh [port] -> SSH to the machine.
+tnet [port] -> Telnet to the machine
+web [port] -> Open a web browser to the first web service on the machine
+webs -> Open a web browser tab for each HTTP/S service on the machine
+ts -> Rdesktop to Terminal Services on the machine
+vnc -> VNC to the machine
+
+exploit		-> If the machine has one or more remote vulnerabilities, you will be prompted to choose and exploit one
+audit		-> Run an on-host audit on the currently-selected host. If the host has been compromised
+         	   automatically by neet, the new account will be automatically used and no username/password
+        	   combination will need to be supplied. However, bear in mind that it is likely that the audit would
+	           have already been run by the AutoAudit module.
+hashdump 	-> Dump the hashes from the currently-selected host. If the host has been compromised
+         	   automatically by neet, the new account will automatically be used and no username/password
+         	   combination will need to be supplied.
+shell 		-> (Windows) - obtain a shell on a windows box. No need to specify credentials if neet has already
+         	   compromised the box.
+meterpreter 	-> (Windows) - obtain a meterpreter session on a windows box (supply the credentials).
+iShellSQL	-> Connects to MS-SQL over its native port and gives a system shell using xp_cmdshell (if enabled).
+
+=============================================================================
+Commands for finding information about the host you're currently dealing with.
+=============================================================================
+
+The host is selected by using the ip address shortcut command, by entering its directory and typing
+"hostmode", or by typing "hostmode" and its IP address.
+
+comp	-> List all ways this machine has been compromised.
+name	-> Displays the hostname. You can specify an alternative IP address to look up.
+ip		-> Opposite of name. Case insensitive.
+os	-> Displays operating system name and version
+vuln	-> Displays vulnerabilities on the machine
+comp	-> Displays ways in which the machine has been compromised
+lowissues -> List low-risk issues on the machine (not vulnerabilities or compromises)
+issues -> List all issues  on the machine, including vulnerabilities and compromises
+svc -> Lists the services on that machine.
+exploit - > Exploit vulnerabilities on the machine (only the ones marked as "safe")
+uexploit -> Exploit vulnerabilities on the machine (including the ones marked as "unsafe")
+info -> Display information about the host
+web [port] -> Launches a web browser, pointed at the first HTTP port on the box (or at port, if specified)
+webs -> Loops through all HTTP/S services on the box
+nfsmnt -> Mounts specified NFS exports from current target
+nfsumnt -> Unmounts all NFS exports from current target
+addnetwork -> Add a route to a remote network through the current target
+delnetwork -> Delete a route to a remote network through the current target
+networks   -> List the routes through the current target
+
+=====================
+The Neet Shell Prompt
+=====================
+->	IN GLOBAL CONTEXT
+	A prompt like this: [S:178][H:47 W:19 U:1 O:27] indicates that:
+	178 instances of services have been found on the network
+	47 Live hosts have been found, of which,
+	19 are some flavour of Windows
+	1 is some flavour of Unix
+	and 27 are other OSs.
+
+-> IN HOST CONTEXT
+	A prompt like this: [128.98.9.15][Compromised][Windows] shows the IP address of the host you
+	are working with, its condition, and its operating system family (if available).
+
+==============
+REPORTING AIDS
+===============
+nonames  -> Will show IP addresses in output, rather than hostnames. This is the default behaviour.
+usenames -> Will show hostnames in output, rather than IP addresses.
+useboth -> Will show IP addresses AND hostnames in output, where possible.
+memo [message] -> Use with a message to add a time-stamped memo entry to the log. Use with no arguments
+ 		  to read all memo entries.
+
+search <File> <string> -> Perform a search of all files beginning with "File" for string "string".
+     Useful for compiling lists of results. 
+     For example, look for all Compaq HTTP Servers of a particular version in Nikto results:
+	    search nikto CompaqHTTPServer/9.9
+     The search "find"s all files with names matching "nikto*", and greps them for the string "CompaqHTTPServer/9.9".
+     You can list nearly all nikto output with this:
+      search nikto +
+     Another example, look for all weak SSL configurations:
+      search issues "short keys"
+     Look for all Accepted SSL/TLS ciphers:
+      search sslscan Accept
+
+iponly ->	Filter to show only IP addresses from command output.
+	Example: svc https | iponly will show only the IP addresses of https services.
+socket -> Filter to show only IP addresses and ports from command output.
+	Example: svc https | socket will show only the IP addresses and ports of https services.
+
+======================================
+IN-SCAN TUNING AND MONITORING COMMANDS
+======================================
+
+budget -> Sets a new overall performance budget. The default value is set in the configuration file.
+					The lower the budget, the fewer scans can run simultaneously. Use with no arguments to make neet
+					display the current budget.
+load   -> Set a new load average target for neet's automatic budget management.
+
+disable <module> -> Disable the specified GSM module.
+enable <module>  -> Re-enable a GSM module which has been disabled with the "disable" command.
+
+threads -> Display all the Neet threads which are currently running.
+queue   -> Show a list of the services queued for processing by the GSM
+debug   -> toggle the debug level between 0,1,2 and 3.
+gsmsummary -> Display a list of loaded GSM modules and the service files being watched by each.
+
+cancel   -> (In host mode) Cancels all scans of the current host.
+
+ Note: Do not use these two unless you really know how the modules work:
+addinstance <module> -> Increments the Maximum allowed number of concurrent instances for the specified module.
+delinstance <module> -> Decrements the Maximum allowed number of concurrent instances for the specified module.
+
+wincreds -> Add credentials for accessing Windows machines
+
+pause	-> Pauses the current scan. Same as CTRL-C in the main UI window.
+=====================
+ENVIRONMENT VARIABLES
+=====================
+
+A number of variables are set in the neet shell, depending on whether you're in host or global mode.
+
+$IP	-> In host mode, this contains the IP address of the target host.
+$LOCAL	-> In host mode, this contains the IP address of the nearest local interface to the target. This is usually
+	   eth0, but if you are scanning from a number of interfaces, this will contain the IP address of the one
+	   used to route to the target. Useful for setting up reverse connections back to your laptop.
+$MSF2	-> Absolute path to neet's Metasploit 2 installation.
+$MSF	-> Absolute path to system's Metasploit 4 installation.
+
+
+
+

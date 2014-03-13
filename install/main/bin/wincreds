@@ -1,0 +1,86 @@
+#!/usr/bin/perl -w
+
+use strict;
+use Fcntl ':flock';
+
+my $TLD=shift();
+my $Resources=shift();
+
+die ("Invalid top-level directory\n") if ( !-d "$TLD" );
+print "Please enter the username (including any domain component) and press ENTER.\n" .
+"eg: DOMAIN\\User\n";
+my $user=<STDIN>;
+chomp $user;
+exit 1 if ($user !~ /\S/);
+print "Thank you. Please enter the password for user \"$user\" and press ENTER.\n";
+my $pass=<STDIN>;
+chomp $pass;
+
+AppendStatValue ("$TLD/credentials","WINDOWS","$user $pass");
+SetStatKey ("${Resources}/user/given.txt","$pass");
+# Store them for another time.
+SetStatKey ("${Resources}/dynamic/guessed.txt","$pass");
+
+sub ReadFile {
+	# Reads $file into an array
+	my $file=shift();
+	if (-f $file && open(F,$file)){
+		flock(F,LOCK_EX);
+		my @_file=<F>;
+		flock(F,LOCK_UN);
+		close F;
+		return @_file;
+	}
+	return undef;
+}
+
+sub AppendStatValue {
+	# Appends "$key $value" to $file, even it if already exists
+	my $file=shift();
+	my $key=shift();
+	my $value=shift();
+	if (open(F,">>$file")){
+		flock(F,LOCK_EX);
+		print F "$key $value\n";
+		flock(F,LOCK_UN);
+		close F;
+		return 1;
+	}
+	return 0;
+}
+
+sub SetStatKey {
+	# Sets $key in $file (at top of file)
+	my $file=shift();
+	my $key=shift();
+	$key =~ s/\\/\\\\/g;
+	if (!GetStatKey($file,$key)){
+		my @_file=ReadFile($file);
+		unshift @_file, "$key \n";
+		if (($#_file >=0) && open(F,">$file")){
+			flock(F,LOCK_EX);
+			for my $__f (@_file){
+				print F $__f if ($__f);
+			}
+			flock(F,LOCK_UN);
+			close F;
+			return 1;
+		}
+		return 0;
+	}
+	return 0;
+}
+
+sub GetStatKey {
+	# Returns 1 if key exists in $file, 0 otherwise
+	my $file=shift();
+	my $key=shift();
+	$key =~ s/\\/\\\\/g;
+	my @_file=ReadFile($file);
+	for my $f (@_file){
+		if ($f && $f =~ /^$key\s/){
+			return 1;
+		}
+	}
+	return 0;
+}

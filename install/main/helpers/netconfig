@@ -1,0 +1,55 @@
+#!/bin/bash
+
+##########################################################################
+#
+#    Neet: Network discovery, enumeration and security assessment tool
+#    Copyright (C) 2008-2014 Jonathan Roach
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#    Contact: jonnyhightower [at] funkygeek.com
+#
+##########################################################################
+
+function usage {
+	echo "Usage: netconfig <interface>"
+	if [ -f ifconfig.txt ]; then
+		echo
+		echo "Interfaces:"
+		grep "Link encap" ifconfig.txt | awk {print'$1'}
+	fi
+	echo
+	exit 1
+}
+
+if [ -z $1 ]; then
+	usage
+fi
+
+if [ ! -f ifconfig.txt ] || ! grep ^$1 ifconfig.txt >/dev/null 2>&1; then
+	usage
+fi
+
+HW=`grep ^$1 ifconfig.txt | awk {print'$5'}`
+IP=`grep ^$1 ifconfig.txt -A1 | grep inet | awk {print'$2'} | awk -F: {print'$2'}`
+MASK=`grep ^$1 ifconfig.txt -A1 | grep inet | awk {print'$4'} | awk -F: {print'$2'}`
+
+echo "Setting $1 HW $HW $IP / $MASK"
+/sbin/ifconfig $1 hw ether $HW
+/sbin/ifconfig $1 $IP netmask $MASK
+
+
+
+
+

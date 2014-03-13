@@ -1,0 +1,97 @@
+#!/usr/bin/perl -w
+
+##########################################################################
+#
+#    Neet: Network discovery, enumeration and security assessment tool
+#    Copyright (C) 2008-2014 Jonathan Roach
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#    Contact: jonnyhightower [at] funkygeek.com
+#
+##########################################################################
+
+use strict;
+use JR::iShell::iShellSQL;
+use JR::Files::Config;
+
+usage() if (!$ARGV[2]);
+
+my $Connector="NativeMSSQL";
+my $host=shift();
+my $password=shift();
+my $user=shift();
+my $Config=Config->new("/etc/neet/neet.conf");
+
+#my $newuser=shift();
+#my $newpassword=shift();
+my $newuser=$Config->GetVal("NewUser");
+my $newpassword=$Config->GetVal("NewPassword");
+my $addgroup="Administrators";
+
+my $shell;
+my $exitcode=1;
+
+usage() if ($host !~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/);
+
+if ("$user"){
+	$shell = JR::iShell::iShellSQL->new('Connector'=>"$Connector", 'Host'=>"$host", 'Pass'=>"$password", 'User'=>"$user");
+} else {
+	$shell = JR::iShell::iShellSQL->new('Connector'=>"$Connector", 'Host'=>"$host", 'Pass'=>"$password");
+}
+if ($shell){
+	my $success=0;
+	print "$host -> Attempting to add user $newuser (password \"$newpassword\")\n";
+	$shell->prompt;
+	my $cmd="net user $newuser $newpassword /add";
+	$shell->exec($cmd);
+	my @b=$shell->output;
+	for my $line (@b){
+		next if ($line !~ /\S/);
+		if ($line =~ /completed successfully/i){
+			$success=1;
+		}
+		print "$line\n";
+	}
+	if ($success){
+		$success=0;
+		if ($shell->prompt){
+			my $cmd="net localgroup $addgroup $newuser /add";
+			$shell->exec($cmd);
+			my @b=$shell->output;
+			for my $line (@b){
+				next if ($line !~ /\S/);
+				if ($line =~ /completed successfully/i){
+					$success=1;
+				}
+				print "$line\n";
+			}
+			if ($success){
+				print "\n ** Success. Added $newuser to the \"$addgroup\" group. **\n";
+				$exitcode=0;
+			}
+		}
+	} else {
+		print "FAILED to add user $newuser.\n";
+	}
+} else {
+	print "Couldn't add user.\n";
+}
+
+exit $exitcode;
+
+sub usage {
+	print "SQLaddaccount should be called only by neet\n";
+	exit 0;
+}

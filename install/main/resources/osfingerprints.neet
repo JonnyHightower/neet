@@ -1,0 +1,111 @@
+# OS Fingerprint signatures. These come from the service banners grabbed by the Service Discovery module.
+
+# Asterisk-separated fields.
+# Service*Banner*OSType*OSFamily*Fam Confidence (1-4)*OSVersion*Ver Confidence (1-4)*ServicePack*SP Confidence (1-4)
+Airport-admin*Apple AirPort admin*Embedded*Apple Airport Base Station*4****
+DAAP*Mac OS X*unix*Macintosh*4*OS X*4**
+Domain*Microsoft DNS*windows*Windows*4**0**0
+Finger*Linux fingerd*unix*Linux*4**0**0
+FTP*ProFTPD 1.3.0 Server (ProFTPD Default Installation)*unix*Linux*3*Slackware*1**0
+FTP*Microsoft FTP Service (Version 5.0)*windows*Windows*4*2000*3*SP4*3
+FTP*FTP server (SunOS 5.6) ready*unix*Solaris*4*6*4**0
+FTP*FTP server (SunOS 5.7) ready*unix*Solaris*4*7*4**0
+FTP*FTP server (SunOS 5.8) ready*unix*Solaris*4*8*4**0
+FTP*vsFTPd*unix*Linux*3****0
+FTP*JD FTP Server Ready*hp*JetDirect*3****
+HTTP*Microsoft-IIS/2.0*windows*Windows*3*NT4*4*SP1*3
+HTTP*Microsoft-IIS/3.0*windows*Windows*3*NT4*4*SP3*3
+HTTP*Microsoft-IIS/4.0*windows*Windows*3*NT4*4*SP4*3
+HTTP*Microsoft-IIS/5.0*windows*Windows*3*2000*4**0
+HTTP*Microsoft-IIS/6.0*windows*Windows*3*2003*4**0
+HTTP*Server: Apache/2.0.48 (Unix)*unix*Linux*3****0
+HTTP*Server: Apache/2.0.52 (CentOS)*unix*Linux*4*CentOS*4**0
+HTTP*Apache/1.3.33 (Unix)*unix*Linux*3****0
+HTTP*(Unix)*unix*Linux*1****0
+HTTP*Server: Allegro-Software-RomPage*embedded*Enterasys Router*3****
+HTTP*Server: HP-Chai*hp*HP Printer*3****
+HTTP*Server: Virata-EmWeb*hp*HP Printer*3****
+HTTP*view iLO web page*embedded*HP integrated Lights Out*3****
+HTTP*Server: KDH/6*unix*AIX*3****
+HTTP*MiniServ/*unix*Linux*1****0
+HTTP*level 15 access*cisco*IOS*4*12.2*2**0
+HTTP*Location: http://(null)/switchExplorer.html*Fabric OS*Unix*3****
+HTTP*Server: mini_httpd/1.19*Konika Di 2010f Enterprise IP phone SIP-T22P*Embedded*3****
+Kerberos-sec*Microsoft Windows kerberos-sec*windows*Windows*3**0**0
+LDAP*Microsoft LDAP server*windows*Windows*3**0**0
+MSRPC*Microsoft Windows RPC*windows*Windows*4**0**0
+Mstask*Microsoft Mstask*windows*Windows*3**0**0
+Ncacn_http*Microsoft Windows RPC over HTTP Version*windows*Windows*4**0**0
+NNTP*200 NNTP Service 5.00.0984 Version: 5.0.2195.6702*windows*Windows*4*2000*2*SP4*3
+Qotd*Windows qotd*windows*Windows*3**0**0
+SMB*OS=[Windows *windows*Windows*****
+SMB*OS=[Windows NT 4.0] Server=[NT LAN Manager 4.0]*windows*Windows*4*NT4*4**0
+SMB*OS=[Windows 5.0] Server=[Windows 2000 LAN Manager]*windows*Windows*4*2000*4**0
+SMB*OS=[Windows 5.1] Server=[Windows 2000 LAN Manager]*windows*Windows*4*XP*4**0
+SMB*OS=[Windows 7 *windows*Windows*4*7*3*SP0*1
+SMB*OS=[Windows 7 Professional 7600] Server=[Windows 7 Professional 6.1]*windows*Windows*4*7 Pro*4*SP0*2
+SMB*OS=[Windows 7 Professional 7601 Service Pack 1] Server=[Windows 7 Professional 6.1]*windows*Windows*4*7 Pro*4*SP1*4
+SMB*OS=[Windows 7 Professional 7601 Service Pack 2] Server=[Windows 7 Professional 6.1]*windows*Windows*4*7 Pro*4*SP2*4
+SMB*OS=[Windows 7 Enterprise 7600] Server=[Windows 7 Enterprise 6.1]*windows*Windows*4*7*4*SP0*2
+SMB*OS=[Windows 7 Enterprise 7601 Service Pack 1] Server=[Windows 7 Enterprise 6.1]*windows*Windows*4*7*4*SP1*4
+SMB*OS=[Windows 7 Enterprise 7601 Service Pack 2] Server=[Windows 7 Enterprise 6.1]*windows*Windows*4*7*4*SP2*4
+SMB*OS=[Windows Server 2003 3790] Server=[Windows Server 2003 5.2]*windows*Windows*4*2003 Server*4*SP0*4
+SMB*OS=[Windows Server 2003 R2 3790] Server=[Windows Server 2003 R2 5.2]*windows*Windows*4*2003 Server*4*SP0*4
+SMB*OS=[Windows Server 2003 3790 Service Pack 1] Server=[Windows Server 2003 5.2]*windows*Windows*4*2003 Server*4*SP1*4
+SMB*OS=[Windows Server 2003 3790 Service Pack 2] Server=[Windows Server 2003 5.2]*windows*Windows*4*2003 Server*4*SP2*4
+SMB*OS=[Windows Server (R) 2008*windows*Windows*4*2008 Server*3*SP0*3
+SMB*OS=[Windows Server 2008*windows*Windows*4*2008 Server*3*SP0*3
+SMB*OS=[Windows Server (R) 2008*windows*Windows*4*2008 Server*3*SP0*3
+SMB*OS=[Windows Server (R) 2008 Standard 6002 Service Pack 1] Server=[Windows Server (R) 2008 Standard*windows*Windows*4*2008 Server*4*SP1*4
+SMB*OS=[Windows Server (R) 2008 Standard 6002 Service Pack 2] Server=[Windows Server (R) 2008 Standard*windows*Windows*4*2008 Server*4*SP2*4
+SMB*OS=[Windows Server 2008 R2 Standard 7600] Server=[Windows Server 2008 R2 Standard 6.1]*windows*Windows*4*2008 Server R2*4*SP0*4
+SMB*OS=[Windows Server 2008 R2 Standard 7601 Service Pack 1] Server=[Windows Server 2008 R2 Standard 6.1]*windows*Windows*4*2008 Server R2*4*SP1*4
+SMB*OS=[Windows Server 2008 R2 Datacenter 7601] Server=[Windows Server 2008 R2 Datacenter 6.1]*windows*Windows*4*2008 Server R2*4*SP0*4
+SMB*OS=[Windows Server 2008 R2 Datacenter 7601 Service Pack 1] Server=[Windows Server 2008 R2 Datacenter 6.1]*windows*Windows*4*2008 Server R2*4*SP1*4
+SMB*OS=[Windows Server 2008 R2 Datacenter 7601 Service Pack 2] Server=[Windows Server 2008 R2 Datacenter 6.1]*windows*Windows*4*2008 Server R2*4*SP2*4
+SMB*OS=[Windows Server (R) 2008 Datacenter without Hyper-V 6002 Service Pack 2] Server=[Windows Server (R) 2008 Datacenter without Hyper-V 6.0]*windows*Windows*4*2008 Server R1*4*SP2*4
+SMB*OS=[Windows Server (R) 2008 Datacenter without Hyper-V 6002 Service Pack 1] Server=[Windows Server (R) 2008 Datacenter without Hyper-V 6.0]*windows*Windows*4*2008 Server*4*SP1*4
+SMB*OS=[Windows Server (R) 2008 Datacenter without Hyper-V 6002] Server=[Windows Server (R) 2008 Datacenter without Hyper-V 6.0]*windows*Windows*4*2008 Server*4*SP0*4
+SMB*OS=[Windows Server (R) 2008 Enterprise 6001 Service Pack 1] Server=[Windows Server (R) 2008 Enterprise 6.0]*windows*Windows*4*2008 Server*4*SP1*4
+SMB*OS=[Windows Server (R) 2008 Enterprise 6001 Service Pack 2] Server=[Windows Server (R) 2008 Enterprise 6.0]*windows*Windows*4*2008 Server*4*SP2*4
+SMB*OS=[Windows Server (R) 2008 Standard without Hyper-V 6002 Service Pack 1]*windows*Windows*4*2008 Server*4*SP1*4
+SMB*OS=[Windows Server (R) 2008 Standard without Hyper-V 6002 Service Pack 2]*windows*Windows*4*2008 Server*4*SP2*4
+SMB*OS=[Windows Server (R) 2008 Enterprise without Hyper-V 6002 Service Pack 1]*windows*Windows*4*2008 Server*4*SP1*4
+SMB*OS=[Windows Server (R) 2008 Enterprise without Hyper-V 6002 Service Pack 2]*windows*Windows*4*2008 Server*4*SP2*4
+SMB*OS=[Windows Server 2003 R2 3790 Service Pack 1] Server=[Windows Server 2003 R2 5.2]*windows*Windows*4*2003 Server*4*SP1*4
+SMB*OS=[Windows Server 2003 R2 3790 Service Pack 2] Server=[Windows Server 2003 R2 5.2]*windows*Windows*4*2003 Server*4*SP2*4
+SMB*OS=[Windows XP 3790 Service Pack 2] Server=[Windows XP 5.2]*windows*Windows*4*XP x64*4*SP2*4
+SMB*OS=[Windows XP 3790 Service Pack 1] Server=[Windows XP 5.2]*windows*Windows*4*XP x64*4*SP1*4
+SMB*OS=[Windows XP 3790] Server=[Windows XP 5.2]*windows*Windows*4*XP x64*4*SP0*4
+SMB*OS=[Windows Vista (TM) Home Premium 6000] Server=[Windows Vista (TM) Home Premium 6.0]*windows*Windows*4*Vista Home Premium*4**0
+SMB*OS=[Unix] Server=[Samba 3.0.23c]*unix*Linux*3*Slackware 11.0*3**0
+SMB*OS=[Unix] Server=[Samba*unix*Linux*2**0**0
+SMB*OS=[Unix] Server=[Samba*unix*FreeBSD*2**0**0
+SMB*OS=[Apple Base Station] Server=[CIFS*unix*Apple*4*Airport*4**0
+SMTP*Microsoft ESMTP MAIL Service, Version: 5.0*windows*Windows*3*2000*2**0
+SMTP*ESMTP Sendmail 8.9.1b+Sun/8.9.1*unix*Solaris*4*7*2**0
+SMTP*ESMTP Sendmail 8.13.8+Sun/8.13.8*unix*Solaris*4*10*2**0
+SMTP*ESMTP Sendmail 8.13.1/8.13.1*unix*Linux*3****0
+SSH*-OpenSSH_*unix*Linux*3**0**0
+SSH*-Sun_SSH_*unix*Solaris*3**0**0
+SSH*-Sun_SSH_1.1*unix*Solaris*3*10*2**0
+SSH*-Cisco-*cisco*IOS*4*12.2*2**0
+Telnet*Sun Solaris telnetd*unix*Solaris*4*6*2**0
+Telnet*Sun Solaris telnetd*unix*Solaris*4*7*2**0
+Telnet*Sun Solaris telnetd*unix*Solaris*4*8*2**0
+Telnet*Sun Solaris telnetd*unix*Solaris*4*9*2**0
+Telnet*BSD-derived telnetd*unix*Solaris*2*10*4**0
+Telnet*SunOS.5.6*unix*Solaris*4*6*4**0
+Telnet*SunOS.5.7*unix*Solaris*4*7*4**0
+Telnet*SunOS.5.8*unix*Solaris*4*8*4**0
+Telnet*SunOS.5.9*unix*Solaris*4*9*4**0
+Telnet*SunOS.5.10*unix*Solaris*4*10*4**0
+Telnet*Cisco router*cisco*IOS*4**0**0
+Telnet*Cisco IOS telnetd*cisco*IOS*4*12.2*2**0
+Telnet*Fabric*Fabric OS*Unix*3****
+Telnet*Fabric*Fabric OS (tm)  Release v3.2.0*unix*4*Fabric OS*4*3.2.0*4
+Telnet*HP JetDirect printer telnetd*hp*JetDirect*4****
+TerminalServices*Microsoft Terminal Service*windows*Windows*4*2000*3**0
+TerminalServices*Microsoft Terminal Service*windows*Windows*4*2003*3**0
+TerminalServices*Microsoft Terminal Service*windows*Windows*4*XP*1**0
+WINS*Microsoft Windows Wins*windows*Windows*4**0**0

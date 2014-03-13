@@ -1,0 +1,49 @@
+#!/usr/bin/perl
+
+my $TLD=$ENV{'NeetTLD'};
+my $use=$ENV{'useNames'};
+
+my %names;
+if ($use){
+	if (open(N,"${TLD}/hostnames.txt")){
+		until (eof N){
+			my $line=readline(*N);
+			chomp $line;
+			if ($line =~ /\S/){
+				my ($ip,$name)=split " ", $line;
+				$names{$ip}=$name;
+			}
+		}
+		close N;
+	}
+}
+
+while (my $line=<>){
+	if ($use){
+
+		my $ip=$line; $ip =~ s/\D{0,}(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\D[\S\s]+$/$1/;
+		if ($ip =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/){
+			my $name=$names{$ip};
+			if ($name){
+				if ($use == 2){
+					$line =~ s/$ip/$ip ($name)/g;					
+				} else {
+					$line =~ s/$ip/$name/g;
+				}
+			}
+		} else {
+			$ip=$line; $ip =~ s/^[\S\s]+ (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})[\S\s]+$/$1/;
+			if ($ip =~ /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/){
+				my $name=$names{$ip};
+				if ($name){
+					if ($use == 2){
+						$line =~ s/$ip/$ip ($name)/g;					
+					} else {
+						$line =~ s/$ip/$name/g;
+					}
+				}
+			}
+		}
+	}
+	print $line;
+}

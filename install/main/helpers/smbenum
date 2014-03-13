@@ -1,0 +1,617 @@
+#!/usr/bin/perl -w
+
+##########################################################################
+#
+#    Neet: Network discovery, enumeration and security assessment tool
+#    Copyright (C) 2008-2014 Jonathan Roach
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#    Contact: jonnyhightower [at] funkygeek.com
+#
+##########################################################################
+
+use strict;
+
+my ($host,$username,$password)=@ARGV;
+
+if (!$username){
+	print "Usage: $0 <target> <[DOMAIN\]user> [password]\n";
+	print "\tIn host mode within the neet shell, <target> is automatically supplied;\n" .
+				"\tyou only need to specify the credentials.\n";
+	exit 1;
+}
+
+if (!defined($password)){
+	$password="";
+}
+
+my %roles = (
+			'00', 'Workstation Service',
+			'01', 'Messenger Service', '03', 'Messenger Service','06', 'RAS Server Service',
+			'1f', 'NetDDE Service','20', 'File Server Service','21', 'RAS Client Service','22', 'Microsoft Exchange Interchange(MSMail Connector)',
+ 			'23', 'Microsoft Exchange Store','24', 'Microsoft Exchange Directory','30', 'Modem Sharing Server Service','31', 'Modem Sharing Client Service',
+			'43', 'SMS Clients Remote Control','44', 'SMS Administrators Remote Control Tool','45', 'SMS Clients Remote Chat', '46', 'SMS Clients Remote Transfer',
+			'4c', 'DEC Pathworks TCPIP service on Windows NT', '42', 'McAfee AV', '52', 'DEC Pathworks TCPIP service on Windows NT', '87', 'Microsoft Exchange MTA',
+			'6a', 'Microsoft Exchange IMC', 'be', 'Network Monitor Agent', 'bf', 'Network Monitor Application', '1b', 'Domain Master Browser', '1d', 'Master Browser',
+			'2b', 'Lotus Notes Server Service',
+	);
+
+my %groles = (
+		  '00', 'Domain Name', '01', 'Master Browser',  '1e', 'Browser Service Elections', '1c', 'Domain Controller', '2f', 'Lotus Notes', '33', 'Lotus Notes'
+	);
+
+my ($HostName,$Workgroup,$SID,@Roles,$Domain,$DomainController);
+my $outputDir="$host/smbenum";
+my $ridcycledOK=0;
+my $userCount=0;
+
+System ("mkdir -p \"$outputDir/raw\"");
+# ******************
+# NetBIOS Name Table
+logMark ("NetBIOS Name Table\n");
+my $command="nmblookup -A $host > $outputDir/raw/nmblookup.txt 2>$outputDir/raw/nbenumerrors.log";
+System("$command");
+
+if (-f "$outputDir/raw/nmblookup.txt" && (my @nmblookup=ReadFile("$outputDir/raw/nmblookup.txt"))){
+	mkdir "$outputDir/netbios";
+	for my $line (@nmblookup){
+		chomp $line;
+		next if ($line !~ /\S/);
+		next if ($line =~ /^Looking up the status of|^No reply from/);
+		$line =~ s/^\s+//g;
+		if ($line =~ /<[\d|a-f]{2}>/){
+			my $desc;
+			my $code=$line; $code =~ s/[\S\s]+<([\d|a-f]{2})>[\S\s]+/$1/;
+			my $hname=substr($line,0,index($line," "));
+
+			if ($line =~ /<GROUP>/){
+				$desc=$groles{$code};
+			} else {
+				$desc=$roles{$code};
+				if (($code eq "00") && ($hname !~ /~/)){
+					$HostName=$hname;
+				}
+			}
+			push @Roles, " ${desc}";
+			if ($desc eq "Domain Name"){
+				$Domain=$hname;
+				SetStatValue("$outputDir/hostInfo.txt","Domain","$Domain");
+				# Pull list of machines in the domain
+				my $command="nmblookup $host $Domain 2>>$outputDir/raw/nbenumerrors.log | grep -v query > $outputDir/netbios/machines-$Domain.txt ";
+				System("$command");
+				$command="nmblookup -M $host $Domain 2>>$outputDir/raw/nbenumerrors.log | grep '>' > $outputDir/netbios/masterBrowser-$Domain.txt";
+				System("$command");
+
+			}
+			if ($desc eq "Domain Controller"){
+				$DomainController=1;
+			}
+			SetListItem("$outputDir/netbios/nmblookup.txt","$line $desc");
+		}
+	}
+
+	# Write roles to hostInfo.txt
+	if ($HostName){
+		SetStatValue("$outputDir/hostInfo.txt","Hostname","$HostName");
+
+	}
+
+	if ($#Roles > -1){
+		my $roles=join (",",@Roles);
+		SetStatValue("$outputDir/hostInfo.txt","Roles","$roles");
+		if ($Domain){
+			SetListItem("$outputDir/domains.txt","$Domain");
+			if ($DomainController){
+				my $_name=$host;
+				$_name .= " $HostName" if ($HostName);
+				SetStatValue("$outputDir/domains.txt","$Domain","$_name");
+			}
+		}
+	}					
+}
+
+
+# SMB Type
+logMark ("SMB Type\n");
+$command="smbclient -L //${host} -U '' -N > $outputDir/raw/smbclient-list.txt 2>&1";
+System("$command");
+if (-f "$outputDir/raw/smbclient-list.txt" && (my @smbfile=ReadFile("$outputDir/raw/smbclient-list.txt"))){
+	my ($win,$apple)=(0,0);
+	for my $line (@smbfile){
+		if ($line =~ /OS=\[Windows/){
+			SetStatValue("$outputDir/hostInfo.txt","SMBType","Windows");
+			$win=1;
+			last;
+		} elsif ($line =~ /OS=\[Apple/){
+			SetStatValue("$outputDir/hostInfo.txt","SMBType","Apple");
+			$apple=1;
+			last;
+		}
+	}
+	SetStatValue("$outputDir/hostInfo.txt","SMBType","Samba") if (!$win && !$apple);
+}
+
+# Enumerating domain sid
+logMark ("Domain SID\n");
+$command="rpcclient //${host} -U \"$username\"%\"$password\" -c lsaquery > $outputDir/raw/domainsid.txt 2>>$outputDir/raw/nbenumerrors.log";
+my $error=System("$command");
+if ($error){
+	sleep (int(rand(3))+1);
+	my $error=System("$command");
+}
+if (-f "$outputDir/raw/domainsid.txt" && (my @sidfile=ReadFile("$outputDir/raw/domainsid.txt"))){
+	for my $line (@sidfile){
+		chomp $line;
+		if ($line =~ /^Domain Name:/){
+			my ($j,$Domain)=split(": ",$line);
+			# Write Domain to hostInfo.txt
+			SetStatValue("$outputDir/hostInfo.txt","Domain","$Domain");
+		}
+		if ($line =~ /^Domain Sid:/){
+			my ($j,$Sid)=split(": ",$line);
+			# Write Sid to hostInfo.txt
+			if (length($Sid) < 32){
+				# Samba
+				logMark ("Domain SID SAMBA\n");
+				$command="rpcclient //${host} -U \"$username\"%\"$password\" -N -c 'lookupnames root' > $outputDir/raw/rootsid.txt 2>>$outputDir/raw/nbenumerrors.log";
+				System("$command");
+				if (-f "$outputDir/raw/rootsid.txt" && (my @rsidfile=ReadFile("$outputDir/raw/rootsid.txt"))){
+					for my $line (@rsidfile){
+						if ($line =~ /^root S\-/){
+							my ($j,$sid,@trash)=split " ", $line; my @comp;
+							if ($sid){
+								@comp=split "\\-", $sid; pop (@comp); $sid = join "-", @comp;
+								SetStatValue("$outputDir/hostInfo.txt","DomainSID","$sid");
+							}
+						}
+						last;
+					}		
+				}
+				SetStatValue("$outputDir/hostInfo.txt","SMBType","Samba");					
+			} else {
+				# Windows
+				SetStatValue("$outputDir/hostInfo.txt","DomainSID","$Sid");
+				SetStatValue("$outputDir/hostInfo.txt","SMBType","Windows");					
+			}
+		}
+	}
+}
+
+# Domain Trusts
+logMark ("Domain Trusts\n");
+
+$command="rpcclient //${host} -U \"$username\"%\"$password\" -c enumtrust > $outputDir/netbios/domaintrusts.txt 2>>$outputDir/raw/nbenumerrors.log";
+System("$command");
+
+logMark ("Domain Info\n");
+$command="rpcclient //${host} -U \"$username\"%\"$password\" -c querydominfo > $outputDir/raw/domaininfo.txt 2>>$outputDir/raw/nbenumerrors.log";
+System("$command");
+
+
+# User enumeration (Null Session)
+logMark ("Null Users\n");
+$command="net rpc user -S ${host} -U \"$username\"%\"$password\" > $outputDir/netbios/users.txt 2>>$outputDir/raw/nbenumerrors.log";
+$error=System("$command");
+
+if (!$error && -f "$outputDir/netbios/users.txt" && (my @ufile=ReadFile("$outputDir/netbios/users.txt"))){
+	SetStatValue("$outputDir/hostInfo.txt","NullEnum","True") if (!$password);
+	print "Host allows user enumeration via Null SMB sessions\n" if (!$password);
+}
+		
+# LDAP enumeration with anonymous bind
+logMark ("LDAP Anon Bind\n");
+
+$command="net ads lookup -S $host > $outputDir/raw/ads.txt 2>>$outputDir/raw/nbenumerrors.log";
+$error=System("$command");
+if (-f "$outputDir/raw/ads.txt" && (my @file=ReadFile("$outputDir/raw/ads.txt"))){
+	for my $line (@file){
+		# Add values to hostInfo.txt
+		if (($line =~ /\syes\s/) && ($line =~ /Is a PDC/)){SetStatValue("$outputDir/hostInfo.txt","IsPDC","True"); next;}
+		if (($line =~ /\syes\s/) && ($line =~ /Is a GC of/)){SetStatValue("$outputDir/hostInfo.txt","IsGC","True"); next;}
+		if (($line =~ /\syes\s/) && ($line =~ /running a KDC/)){SetStatValue("$outputDir/hostInfo.txt","IsKDC","True"); next;}
+		if (($line =~ /\syes\s/) && ($line =~ /running time services/)){SetStatValue("$outputDir/hostInfo.txt","IsTime","True"); next;}
+		if (($line =~ /\syes\s/) && ($line =~ /closest DC/)){SetStatValue("$outputDir/hostInfo.txt","IsClosestDC","True"); next;}
+		if (($line =~ /\syes\s/) && ($line =~ /Is writable/)){SetStatValue("$outputDir/hostInfo.txt","IsWritable","True"); next;}
+		if (($line =~ /\syes\s/) && ($line =~ /Is a non-domain/)){SetStatValue("$outputDir/hostInfo.txt","Non-Domain","True"); next;}
+
+		for my $data ("Forest","Domain","Site Name","Domain Controller"){
+			if ($line =~ /^${data}:/){
+				chomp $line;
+				$line =~ s/^${data}:[\s]+//g;
+				my $role=$data; $role =~ s/\s//g;
+				SetStatValue("$outputDir/hostInfo.txt","$role","$line");
+				last;
+			}
+		}
+	}
+}
+
+# SHARES
+logMark ("Share enum\n");
+$command="net rpc share -l -S ${host} -U \"$username\"%\"$password\" > $outputDir/netbios/shares.txt 2>>$outputDir/raw/nbenumerrors.log";
+$error=System("$command");
+if (!$error && -f "$outputDir/netbios/shares.txt" && (my @shfile=ReadFile("$outputDir/netbios/shares.txt"))){
+	SetStatValue("$outputDir/hostInfo.txt","ExportsShares","True");
+	print "Host allows share enumeration via Null SMB sessions\n" if (!$password);
+}
+
+# GROUPS
+logMark ("Group enum\n");
+$command="net rpc group -l -S ${host} -U \"$username\"%\"$password\" > $outputDir/netbios/groups.txt 2>>$outputDir/raw/nbenumerrors.log";
+$error=System("$command");
+if (!$error && -f "$outputDir/netbios/groups.txt" && (my @gfile=ReadFile("$outputDir/netbios/groups.txt"))){
+	for my $group ("Administrators","Domain Admins","Enterprise Admins","Domain Controllers"){
+		logMark ("Group enum: $group\n");
+		System("net rpc group MEMBERS \"${group}\" -l -S ${host} -U \"$username\"%\"$password\" > \"$outputDir/netbios/members-${group}.txt\" 2>>$outputDir/raw/nbenumerrors.log");
+	}
+}
+
+# Detailed user info
+my $user_limit=200;
+logMark ("Detailed user info\n");
+for my $user (ReadFile("$outputDir/netbios/users.txt")){
+	next if (!$user || $user !~ /\S/);
+	next if (($user =~ /\(/) || ($user =~ /failed/));
+	last if ($userCount > $user_limit);
+	chomp $user;
+	next if (-f "$outputDir/netbios/details-${user}.txt");
+	logMark ("Detailed user: $user 1\n");
+	my $rid=`rpcclient //$host -U \"$username\"%\"$password\" -c "samlookupnames domain \"$user\"" 2>>$outputDir/raw/nbenumerrors.log`;
+	next if ($rid =~ /NT\_STATUS\_/);
+	# rpcclient returns RPC error information in STDOUT, not STDERR. Clean this stuff out before processing.
+	$rid=~s/^[\s\S]+ $user: (0x\w{2,5})\s[\s\S]+/$1/; $rid=hex $rid;
+	SetStatValue("$outputDir/netbios/rids.txt","$user","$rid");
+	logMark ("Detailed user: $user 2\n");
+	System("rpcclient //${host} -U \"$username\"%\"$password\" -c \"queryuser $rid\" > \"$outputDir/netbios/details-${user}.txt\" 2>>$outputDir/raw/nbenumerrors.log");
+	$userCount++;
+}
+
+if ($userCount){
+	# PASSWORD POLICY
+	# Run the command if the flag isn't set and we're enumerating a Windows machine
+	if (GetStatValue("$outputDir/hostInfo.txt","SMBType") eq "Windows"){
+		logMark ("Password Policy\n");
+		$command="echo account show | net rpc shell -S ${host} -U \"$username\"%\"$password\" >$outputDir/netbios/passwordpolicy.txt 2>>$outputDir/raw/nbenumerrors.log";
+		my $error=System("$command");
+		if (-f "$outputDir/netbios/passwordpolicy.txt" && (my @ppfile=ReadFile("$outputDir/netbios/passwordpolicy.txt"))){
+			my $lockout=0;
+			for my $line (@ppfile){
+				if ($line =~ /Bad logon attempts:\s+[1-9]{1,}/){
+					$lockout=1;
+					last;
+				}
+			}
+
+			if ($lockout == 0){
+				SetStatValue("$outputDir/hostInfo.txt","NoLockout","True");
+				 print "Host has no password lockout policy\n";
+			}
+		}
+	}
+}
+
+#{ # Now try RID Cycling
+if (!GetStatKey("$outputDir/hostInfo.txt","NullEnum") && (!$userCount)){
+	# No NULL enumeration
+	my $smbtype=GetStatValue("$outputDir/hostInfo.txt","SMBType");
+	if ($smbtype && "$smbtype" =~ /windows/i){
+		my $sid=GetStatValue("$outputDir/hostInfo.txt","DomainSID");
+		if ($sid){
+			my $maxrid=1300;
+			logMark ("RID Cycle (WIN)\n");
+			for (my $rid=500; $rid<$maxrid; $rid++){
+				my $uname=`rpcclient //$host -U '' -N -c "lookupsids ${sid}-${rid}" 2>>$outputDir/raw/nbenumerrors.log`;
+				chomp $uname;
+				next if (($uname =~ /NT_STATUS_NONE_MAPPED/) || ($uname =~ /\*unknown\*/));
+				$uname=~s/^\S+\s([\S\s]+)\([\s\S]+/$1/;
+				SetStatValue("$outputDir/netbios/ridcycled.txt","$uname","$rid");
+			}
+			$ridcycledOK=1;
+		}
+	} else {
+		my $sid=GetStatValue("$outputDir/hostInfo.txt","DomainSID");
+		if ($sid){
+			my $maxrid=100;
+			logMark ("RID Cycle (SAMBA)\n");
+			for (my $rid=0; $rid<$maxrid; $rid++){
+				my $uname=`rpcclient //$host -U '' -N -c "lookupsids ${sid}-${rid}" 2>>$outputDir/raw/nbenumerrors.log`;
+				chomp $uname;
+				next if (($uname =~ /NT_STATUS_NONE_MAPPED/) || ($uname =~ /\*unknown\*/));
+
+				$uname=~s/^\S+\s([\S\s]+)\([\s\S]+/$1/;
+				SetStatValue("$outputDir/netbios/ridcycled.txt","$uname","$rid");
+			}
+			for my $rid (500,501){
+				my $uname=`rpcclient //$host -U '' -N -c "lookupsids ${sid}-${rid}" 2>>$outputDir/raw/nbenumerrors.log`;
+				chomp $uname;
+				next if (($uname =~ /NT_STATUS_NONE_MAPPED/) || ($uname =~ /\*unknown\*/));
+				$uname=~s/^\S+\s([\S\s]+)\([\s\S]+/$1/;
+				SetStatValue("$outputDir/netbios/ridcycled.txt","$uname","$rid");
+			}
+			$maxrid=1100;
+			for (my $rid=1000; $rid<$maxrid; $rid++){
+				my $uname=`rpcclient //$host -U '' -N -c "lookupsids ${sid}-${rid}" 2>>$outputDir/raw/nbenumerrors.log`;
+				chomp $uname;
+				next if (($uname =~ /NT_STATUS_NONE_MAPPED/) || ($uname =~ /\*unknown\*/));
+				$uname=~s/^\S+\s([\S\s]+)\([\s\S]+/$1/;
+				SetStatValue("$outputDir/netbios/ridcycled.txt","$uname","$rid");
+			}
+			$ridcycledOK=1;
+		}
+	}
+}
+
+if ($ridcycledOK){
+	my $validUsers=0;
+	for my $uname (ReadFile("$outputDir/netbios/ridcycled.txt")){
+		chomp $uname;
+		last if ("$uname" =~ /NT_STATUS_ACCESS_DENIED/);
+		next if ("$uname" =~ /NT_STATUS/);
+		my $sid=$uname; $sid =~ s/[\S\s]+  (\d+)$/$1/;
+		$uname =~ s/\s+\d+$//;
+		$uname =~ s/Unix User\\//;
+		next if ($uname =~ /\S+\\unix_user\./);
+		next if ($uname =~ /\S+\\unix_group\./);
+		next if ("$uname" eq "$sid");
+		$validUsers++;
+		SetListItem("$outputDir/netbios/users.txt","$uname");
+	}
+	if ($validUsers){
+	 print "Host allows user enumeration via RID Cycling\n" if (!$password);
+	}
+}
+
+####################
+
+sub logMark {
+	my $message=shift();
+	print "$message";
+	if (open(LG,">>$outputDir/raw/nbenumerrors.log")){
+		print LG "$message";
+		close LG;
+		return 0;
+	}
+	return 1;
+}
+
+sub System {
+	my $cmd=shift();
+	if ($cmd){
+		my $error=system("$cmd");
+		$error = $error >> 8;
+		return $error;
+	}
+	return undef;
+}
+
+use Fcntl ':flock';
+
+sub ReadFile {
+	# Reads $file into an array
+	my $file=shift();
+	if (-f $file && open(F,$file)){
+		flock(F,LOCK_EX);
+		my @_file=<F>;
+		flock(F,LOCK_UN);
+		close F;
+		return @_file;
+	}
+	return undef;
+}
+
+sub GetStatValue {
+	# Matches first key in file and gets the value (space-separated)
+	my $file=shift();
+	my $key=shift();
+	my @_file=ReadFile($file);
+	for my $f (@_file){
+		if ($f && index($f,"$key ")==0){
+		#if ($f && $f =~ /^$key /){
+			my ($key,$val)=split (" ", $f, 2);
+			chomp $val;
+			return $val;
+		}
+	}
+	return undef;
+}
+
+sub GetStatKey {
+	# Returns 1 if key exists in $file, 0 otherwise
+	my $file=shift();
+	my $key=shift();
+	$key =~ s/\\/\\\\/g;
+	my @_file=ReadFile($file);
+	for my $f (@_file){
+		if ($f && $f =~ /^\Q$key\E\s/){
+			return 1;
+		}
+	}
+	return 0;
+}
+
+sub GetStatKeys {
+	# Returns an array of keys in $file
+	my $file=shift();
+	my @_file=ReadFile($file);
+	my @keys;
+	for my $f (@_file){
+		if ($f && ($f =~ /^\S/) && ($f !~ /^#/)){
+			my $key = substr($f,0,index($f," "));
+			#my $key = $f;
+			#$key =~ s/^(\S+)\s[\s\S]+/$1/;
+			#$key =~ s/\s//g;
+			push @keys, $key;
+		}
+	}
+	return @keys;
+}
+
+sub SetStatKey {
+	# Sets $key in $file
+	my $file=shift();
+	my $key=shift();
+	$key =~ s/\\/\\\\/g;
+	if (!GetStatKey($file,$key)){
+		my @_file=ReadFile($file);
+		push @_file, "$key \n";
+		if (($#_file >=0) && open(F,">$file")){
+			flock(F,LOCK_EX);
+			for my $__f (@_file){
+				print F $__f if ($__f);
+			}
+			flock(F,LOCK_UN);
+			close F;
+			return 1;
+		}
+		return 0;
+	}
+	return 0;
+}
+
+sub DelStatKey {
+	# Removes $key from $file
+	my $file=shift();
+	my $key=shift();
+	$key =~ s/\\/\\\\/g;
+	if (GetStatKey($file,$key)){
+		my @_file=ReadFile($file);
+		my @_newfile;
+		my $matched=0;
+		for my $pair (@_file){
+			if ($pair && index($pair,"$key ")==0){
+			#if ($pair && $pair =~ /^$key\s/){
+				$matched=1;
+				next;
+			}
+			push @_newfile, $pair if ($pair);
+		}
+		if ($matched && open(F,">$file")){
+			flock(F,LOCK_EX);
+			print F @_newfile;
+			flock(F,LOCK_UN);
+			close F;
+			return 1;
+		}
+		return 0;
+	}
+	return 0;
+}
+
+sub SetStatValue {
+	# Sets $key=$value in $file
+	my $file=shift();
+	my $key=shift();
+	my $value=shift();
+	$key =~ s/\\/\\\\/g;
+	$value =~ s/\\/\\\\/g;
+	my @_file=ReadFile($file);
+	my @_newfile; my $mod=0;
+	for my $pair (@_file){
+		if ($pair && index($pair,"$key ")==0){
+		#if ($pair && $pair =~ /^$key\s/){
+			$pair = "$key $value\n";
+			$pair =~ s/\\\\/\\/g;
+			$mod=1;
+		}
+		push @_newfile, $pair if ($pair);
+	}
+	if (!$mod){
+		$key =~ s/\\\\/\\/g;
+		$value =~ s/\\\\/\\/g;
+		push @_newfile, "$key $value\n";
+	}
+	if (($#_newfile >=0) && open(F,">$file")){
+		flock(F,LOCK_EX);
+		print F @_newfile;
+		flock(F,LOCK_UN);
+		close F;
+		return 1;
+	}
+	return 0;
+}
+
+sub AppendStatValue {
+	# Appends "$key $value" to $file, even it if already exists
+	my $file=shift();
+	my $key=shift();
+	my $value=shift();
+	if (open(F,">>$file")){
+		flock(F,LOCK_EX);
+		print F "$key $value\n";
+		flock(F,LOCK_UN);
+		close F;
+		return 1;
+	}
+	return 0;
+}
+
+sub DelStatKeyValue {
+	# Removes "$key $value" from $file
+	my $file=shift();
+	my $key=shift();
+	my $value=shift();
+	if (GetStatValue($file,$key) eq $value){
+		my @_file=ReadFile($file);
+		my @_newfile;
+		my $matched=0;
+		for my $pair (@_file){
+			#if ($pair && $pair =~ /^$key $value\n/){
+			if ($pair && index($pair,"$key $value\n")==0){
+				$matched=1;
+				next;
+			}
+			push @_newfile, $pair if ($pair);
+		}
+		if ($matched && open(F,">$file")){
+			flock(F,LOCK_EX);
+			print F @_newfile;
+			flock(F,LOCK_UN);
+			close F;
+			return 1;
+		}
+	}
+	return 0;
+
+}
+
+# For lists of keys without values, such as LiveHosts list
+
+sub SetListItem {
+	my $file=shift();
+	my $key=shift(); my $ekey=$key;
+	$ekey =~ s/\\/\\\\/g;
+	if (!GetStatKey($file,$key)){
+		my @_file=ReadFile($file);
+		for my $f (@_file){
+			#if ($f && $f =~ /^$ekey\n/){
+			if ($f && index($f,"$ekey\n")==0){
+				return 0;
+			}
+		}
+		push @_file, "$key\n";
+		if (($#_file >=0) && open(F,">$file")){
+			flock(F,LOCK_EX);
+			for my $__f (@_file){
+				print F $__f if ($__f);
+			}
+			flock(F,LOCK_UN);
+			close F;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+

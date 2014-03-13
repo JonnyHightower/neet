@@ -1,0 +1,478 @@
+##########################################################################
+#
+#    Neet: Network discovery, enumeration and security assessment tool
+#    Copyright (C) 2008-2014 Jonathan Roach
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#    Contact: jonnyhightower [at] funkygeek.com
+#
+##########################################################################
+
+package SMTP;
+
+sub new {
+	my $pkg=shift();
+	my %struct;
+	$struct{'Name'}=$pkg;
+	$struct{'MainScan'}=shift();
+	my $self=\%struct;
+	bless $self, $pkg;
+
+	# >>>>>>>>>>>>>>>>>>>>>>>>>>>
+	# Customise these parameters
+	$struct{'Enabled'}=1;
+	$struct{'Protocol'}='tcp';
+	@{$struct{'WatchFiles'}}=("smtp.txt");
+	$struct{'Cost'}=5;
+	$struct{'OnePerHost'}=0;
+	$struct{'MaxInstances'}=0;
+	@{$struct{'ConflictingModules'}}=('');
+
+	# End parameter customisation
+	# >>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+	return $self;
+}
+
+sub activate {
+	my $self=shift();
+	my $MainScan=$$self{'MainScan'};
+	my $target=shift();
+	my $file=shift();
+	my $threadID=Neet::threads->tid;
+	my $cost=$$self{'Cost'};
+	my $name=$$self{'Name'};
+	my $Config=$MainScan->Config;
+	my $Log=$MainScan->Log;
+	my ($host,$protport) = split (":", $target);
+	my $socket=$host;
+	my ($protocol,$port);
+	my $outputDir=$MainScan->ResultsDirectory . "/$host";
+	my $resourceDir=$MainScan->ResourceDirectory . "/modules/$name";
+	my ($targetType,$interface)=$MainScan->IsHostLocal($host);
+
+	($protocol,$port) = split ("/", $protport) if ($protport);
+	$socket .= ":$port" if ($port);
+	return 0 if ($protocol && $$self{'Protocol'} && ("$protocol" ne "$$self{'Protocol'}"));
+	# Don't scan if the host is cancelled
+	if ($MainScan->IsHostCancelled($host)){
+		$Log->Status ("$name (thread $threadID) -> scans against $target CANCELLED\n","LOGONLY");
+		return 0;
+	}
+	$0 = "Neet - GSM: $name thread $threadID testing $target";
+
+	if (!$self->IsScanComplete("$name","$target")){
+		# Tell the user what we're doing
+		$Log->Status ("GSM $name (thread $threadID) -> Scanning $socket ($targetType $interface)\n");
+
+		#>>>>>>>>>>>>     >>>>>>>>>>>>>   >>>>>>>>>>>>>   >>>>>>>>>>>>>
+		#>>>>>>>>>>>>> Beginning of module-specific code >>>>>>>>>>>>>>
+		#>>>>>>>>>>>>     >>>>>>>>>>>>>   >>>>>>>>>>>>>   >>>>>>>>>>>>>
+
+		use IO::Socket::INET;
+
+		# Set up the signal handler for exiting cleanly
+		$SIG{'USR1'}=sub{
+			$self->SetScanInComplete("$name","$target");
+			Neet::threads->exit();
+		};
+
+		my $users=$Config->GetVal("ResourceDirectory") . "/modules/${name}/" . "defaultUsers";
+    my $randomString;
+    for (my $i=0; $i<12; $i++){
+      $randomString .= chr(int(rand(26))+65);
+    }
+
+		my @testUsers=("root","someunknownuser","postmaster","bounce",$randomString);
+		my @validUsers;
+		my ($vrfy,$expn,$relay,$vrfyFalsePositive,$expnFalsePositive,$vrfyUseDomain,$expnUseDomain)
+				=(0,0,0,0,0,0,0);
+		my ($code,$domain,$version,$time,$response);
+
+    no strict 'subs';
+    sub SMTP {
+      my $sock=shift();
+      my $message=shift();
+      my $timeout=10; # Seconds
+      my $response;
+			my $code;
+      my $DEBUG=0;
+  		$SIG{'ALRM'}=sub {
+  			die ("TIMEOUT");
+  		};
+  		alarm ($timeout);
+  		eval {
+        print "Sending: $message" if ($DEBUG);
+        print $sock ("$message");
+        $response=<$sock>;
+        print "Response: $response" if ($DEBUG);
+  			alarm 0;
+  		};
+
+  		if ("$@" !~ /^TIMEOUT/){
+  			$SIG{'ALRM'}='';
+  			if ($response =~ /^\d{3}\s/){
+				  ($code,$response) = split(" ", $response,2);
+          print "Code: $code Message: $response" if ($DEBUG);
+     			return ($code,$response);
+				}
+  		} else {
+  			$SIG{'ALRM'}='';
+  			return (0,0);
+  		}
+    }
+		
+		# Test for VRFY and EXPN first
+		my $sock=IO::Socket::INET->new(	'PeerAddr' => $host,
+																		'PeerPort' => $port,
+																		'Proto'    => 'tcp'
+																	);
+    if ($sock){
+      ($code,$response)= SMTP($sock,"");
+      if ($code){
+        for my $element (split " ", $response){
+          if (($element =~ /\./) && ($element !~ /SMTP/)){
+            chomp $element;
+            $domain=$element; 
+            last;
+          }
+        }
+        if ($domain){
+          if ($domain =~ /^\S+\.\S+\.\S+$/){
+            $domain = substr($domain,(index($domain,".")+1),(length($domain)-index($domain,".")-1));
+          }
+        }
+        ($code,$response)= SMTP($sock,"HELO neettest.com\r\n");
+
+        # See if VRFY actually works
+        for my $q (1, 2){
+          my $FalsePositive=0;
+          last if (($q == 2) && (!$domain));
+          # We try this twice, first with the domain component and second without
+          my $skip=0;
+    			for my $user (@testUsers){
+            my $smtpUser=$user;
+            if ($q == 2){
+              $smtpUser .= "@" . $domain;
+            }
+            ($code,$response)= SMTP($sock,"VRFY $smtpUser\r\n");
+  	  			if ($code =~ /^5/){
+              $skip=1;
+              last;
+  					} elsif ($code =~ /^25\d/ && $response !~ /Cannot VRFY /i){
+              if ("$user" eq "$randomString"){
+                $FalsePositive=1;
+                last;
+              } else {
+      					$vrfyUseDomain=1 if ($q == 2);
+      					$vrfy=1;
+              }
+            }
+          }
+          $vrfyFalsePositive=$FalsePositive;
+          last if ($skip);
+        }
+
+        # Same with EXPN
+        for my $q (1, 2){
+          my $FalsePositive=0;
+          last if (($q == 2) && (!$domain));
+          # We try this twice, first with the domain component and second without
+          my $skip=0;
+    			for my $user (@testUsers){
+            my $smtpUser=$user;
+            if ($q == 2){
+              $smtpUser .= "@" . $domain;
+            }
+            ($code,$response)= SMTP($sock,"EXPN $smtpUser\r\n");
+  	  			if ($code =~ /^5/){
+              $skip=1;
+              last;
+  					} elsif ($code =~ /^25\d/ && $response !~ /Cannot EXPN /i){
+              if ("$user" eq "$randomString"){
+                $FalsePositive=1;
+                last;
+              } else {
+      					$expnUseDomain=1 if ($q == 2);
+      					$expn=1;
+              }
+            }
+          }
+          $expnFalsePositive=$FalsePositive;
+          last if ($skip);
+        }
+
+        ($code,$response)= SMTP($sock,"QUIT\r\n");
+
+      }
+      close $sock;
+    }
+
+		# User enumeration by expn if available, otherwise by vrfy
+
+		$#validUsers=-1;
+		@testUsers=$MainScan->ReadFile($users);
+
+		my $method="EXPN";
+		if ($expn && !$expnFalsePositive){
+		  my $message="SMTP service supports EXPN";
+			$MainScan->RecordIssue($target,"GSM-SMTP-2",$message);
+
+	  	my $sock=IO::Socket::INET->new(	'PeerAddr'	=> $host,
+																			'PeerPort' 	=> $port,
+																			'Proto'    	=> 'tcp'
+																	);
+			if ($sock){
+				($code,$response)= SMTP($sock,"");
+      	if ($code){
+        	for my $element (split " ", $response){
+          	if (($element =~ /\./) && ($element !~ /SMTP/)){
+            	chomp $element;
+            	$domain=$element; 
+            	last;
+          	}
+        	}
+        	if ($domain){
+          	if ($domain =~ /^\S+\.\S+\.\S+$/){
+          	  $domain = substr($domain,(index($domain,".")+1),(length($domain)-index($domain,".")-1));
+          	}
+        	}
+        	($code,$response)= SMTP($sock,"HELO neettest.com\r\n");
+
+  		  	for my $user (@testUsers){
+          	my $smtpUser=$user;
+          	if ($expnUseDomain){
+          	  $smtpUser .= "@" . $domain;
+          	}
+          	($code,$response)= SMTP($sock,"EXPN $smtpUser\r\n");
+	  				if ($code =~ /^25\d/ && $response !~ /Cannot /i){
+          		push @validUsers, $user;
+          	}
+        	}
+      	}
+      	close $sock;
+			}
+  	} elsif ($vrfy && !$vrfyFalsePositive){
+    	$method="VRFY";
+    	my $message="SMTP service supports VRFY";
+			$MainScan->RecordIssue($target,"GSM-SMTP-1",$message);
+
+  		my $sock=IO::Socket::INET->new(	'PeerAddr' => $host,
+																			'PeerPort' => $port,
+																			'Proto'    => 'tcp'
+																		);
+    	if ($sock){
+     		($code,$response)= SMTP($sock,"");
+     		if ($code){
+       		for my $element (split " ", $response){
+         		if (($element =~ /\./) && ($element !~ /SMTP/)){
+           		chomp $element;
+           		$domain=$element; 
+           		last;
+         		}
+       		}
+				}
+       	if ($domain){
+         	if ($domain =~ /^\S+\.\S+\.\S+$/){
+           	$domain = substr($domain,(index($domain,".")+1),(length($domain)-index($domain,".")-1));
+         	}
+       	}
+       	($code,$response)= SMTP($sock,"HELO neettest.com\r\n");
+
+  	  	for my $user (@testUsers){
+         	my $smtpUser=$user;
+         	if ($expnUseDomain){
+           	$smtpUser .= "@" . $domain;
+         	}
+         	($code,$response)= SMTP($sock,"VRFY $smtpUser\r\n");
+	  			if ($code =~ /^25\d/ && $response !~ /Cannot /i){
+           	push @validUsers, $user;
+         	}
+       	}
+				close $sock;
+    	}
+		}
+
+	  my $FH;
+		if ($#validUsers >=0 && open($FH,">>${outputDir}/smtpEnum.txt")){
+		  print $FH "Enumerated the following users using $method:\n";
+			print $FH join "\n", @validUsers;
+			print $FH "\n";
+			close $FH;
+			my $num=$#validUsers +1;
+			my $message="SMTP service: Enumerated $num users with $method";
+			$MainScan->RecordVulnerability($target,"GSM-SMTP-3",$message);
+		}
+
+
+		# Now the RELAY test
+	  my ($mail,$rcpt)=(0,0);
+		my $targetMail=$Config->GetVal("Accounts.MailRelay");
+
+	  $sock=IO::Socket::INET->new(	'PeerAddr' => $host,
+																	'PeerPort' => $port,
+																	'Proto'    => 'tcp'
+																);
+	  if ($sock){
+	    ($code,$response)= SMTP($sock,"");
+	    if ($code){
+	      for my $element (split " ", $response){
+	        if (($element =~ /\./) && ($element !~ /SMTP/)){
+	          chomp $element;
+	          $domain=$element; 
+	          last;
+	        }
+	      }
+	      if ($domain){
+	        if ($domain =~ /^\S+\.\S+\.\S+$/){
+	            $domain = substr($domain,(index($domain,".")+1),(length($domain)-index($domain,".")-1));
+	        }
+	      } else {
+	  		  $domain="thisd0m41nshouldnotexist.com";
+	      }
+
+				for my $u ($MainScan->ReadFile("smtpEnum.txt")){
+					next if (!defined($u) || ($u =~ /Enumerated the following/));
+					chomp $u;
+					$user=$u;
+					last;
+				}
+				$user="root" if (!$user);
+
+	      ($code,$response)= SMTP($sock,"HELO neettest.com\r\n");
+	      ($code,$response)= SMTP($sock,"MAIL FROM: ${user}\@${domain}\r\n");
+				if ($code =~ /^25\d/){
+					$mail=1;
+				}
+	      if ($mail){
+	        ($code,$response)= SMTP($sock,"RCPT TO: $targetMail\r\n");
+		  		if ($code =~ /^25\d/){
+			  		$rcpt=1;
+	  			}
+	      }
+
+				if ($rcpt){
+	        ($code,$response)= SMTP($sock,"DATA\r\n");
+	        if ($code =~ /^3/){
+	          ($code,$response)= SMTP($sock,
+	          "To: RECIP <${targetMail}>\r\n" .
+	          "From: SEND <${user}\@${domain}>\r\n" .
+	          "Subject: Mail Relay Test from ${target} {$domain}\r\n\r\n" .
+	          "If you are reading this, then the SMTP server at $target $port is relaying mail for domains other than $domain.\r\n.\r\n\r\n");
+
+						if ($code =~ /^25\d/){
+							$relay=1;
+						}
+					}
+				}
+
+				if ($relay){
+					my $message="SMTP service allows mail relays to $targetMail";
+					$MainScan->RecordVulnerability($target,"GSM-SMTP-4",$message);
+				}
+	    }
+	    ($code,$response)= SMTP($sock,"QUIT\r\n");
+	    close $sock;
+	  }
+
+		#>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>
+		#>>>>>>>>>>>>> End of module-specific code >>>>>>>>>>>>>>
+		#>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>
+
+		# Don't modify anything below this line.
+		$self->SetScanComplete("$name","$target");
+	} else {
+		$Log->Status ("GSM $name (thread $threadID) -> $socket already scanned - skipping\n","LOGONLY");
+	}
+	$Log->Status ("GSM $name (thread $threadID) -> $socket FINISHED Scanning\n");
+	return 0;
+}
+
+sub SingleScan {
+	my $self=shift;
+	return $$self{'OnePerHost'};
+}
+
+sub Name {
+	my $self=shift();
+	return $$self{'Name'};
+}
+sub Cost {
+	my $self=shift();
+	return $$self{'Cost'};
+}
+sub Enabled {
+	my $self=shift();
+	return $$self{'Enabled'};
+}
+sub Watching {
+	my $self=shift();
+	return @{$$self{'WatchFiles'}};
+}
+
+sub TargetSpec {
+	my $self=shift();
+	my $targetSpec=shift();
+	if (!defined($targetSpec)){
+		return $$self{'TargetSpec'};
+	} else {
+		$$self{'TargetSpec'}=$targetSpec;
+	}
+}
+
+sub IsScanComplete {
+	my $self=shift();
+	my $name=shift();
+	my $target=shift();
+	my ($host,$junk)=split ":", $target;
+	my $MainScan=$$self{'MainScan'};
+	my $scanName="GSM_${name}_$target";
+	return $MainScan->GetStatKey($MainScan->ResultsDirectory . "/$host/.gsmcomplete",$scanName);
+}
+
+sub SetScanComplete {
+	my $self=shift();
+	my $name=shift();
+	my $target=shift();
+	my ($host,$junk)=split ":", $target;
+	my $MainScan=$$self{'MainScan'};
+	my $scanName="GSM_${name}_$target";
+	$MainScan->SetStatKey($MainScan->ResultsDirectory . "/$host/.gsmcomplete",$scanName);
+	return 1;
+}
+
+sub SetScanInComplete {
+	my $self=shift();
+	my $name=shift();
+	my $target=shift();
+	my ($host,$junk)=split ":", $target;
+	my $MainScan=$$self{'MainScan'};
+	my $scanName="GSM_${name}_$target";
+	if ($MainScan->DelStatKey($MainScan->ResultsDirectory . "/$host/.gsmcomplete",$scanName)){
+		return 1;
+	} else {
+		return 0;
+	}
+}
+sub MaxInstances {
+	my $self=shift();
+	return $$self{'MaxInstances'};
+}
+sub ConflictsWith {
+	my $self=shift();
+	return @{$$self{'ConflictingModules'}};
+}
+
+1;

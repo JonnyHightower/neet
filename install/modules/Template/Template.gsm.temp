@@ -1,0 +1,236 @@
+# This Template is provided for use as a basis for your own modules.
+
+# In case you haven't guessed, this is written in PERL. The code is run in a 'strict' environment, so
+# make sure to use "my" to limit the scope of your variables, or the module will fail to load.
+
+# The only code areas you should modify are:
+
+# * The "Customise these parameters" area in the "new" subroutine
+# * The code for the actual test in the "activate" subroutine, after "Beginning of module-specific code"
+#   and before "End of module-specific code".
+
+# The rest of the code should remain unmodified. You may wish to remove a lot of these example comments
+# for the sake of readability of your code.
+package __TEMPLATE__;
+
+sub new {
+	my $pkg=shift();
+	my %struct;
+	$struct{'Name'}=$pkg;
+	$struct{'MainScan'}=shift();
+	my $self=\%struct;
+	bless $self, $pkg;
+
+	# >>>>>>>>>>>>>>>>>>>>>>>>>>>
+	# Customise these parameters
+
+	# If $struct{'Enabled'} is 0, the module won't be loaded, and therefore won't test anything.
+	# As this is a template module, we don't really want it to run.
+	$struct{'Enabled'}=0;
+
+	# If your module only tests a UDP or TCP service, put a lower-case protocol name in $struct{'Protocol'}.
+	$struct{'Protocol'}='';
+
+	# @{$struct{'WatchFiles'}} is an array of files to watch in the "services" directory.
+	# You can specify more than one. If any of them change, your module will be activated with the new services.
+	@{$struct{'WatchFiles'}}=("__SERVICE__.txt");
+
+	# Cost is used to determine how resource-intensive your module is. As modules are started, their cost is added
+	# up, and once the budget is reached, no more modules will start until some finish and release more budget.
+	# As a rule, 10 is a lightweight test, and 100 is something intensive like nikto or an SMB brute-force.
+	$struct{'Cost'}=30;
+
+	# $struct{'OnePerHost'} should be 0 if more than one instance of this service is to be tested per host. Most
+	# modules will be set this way. If it is set to 1, then your module will only be told about the host IP, and
+	# not a protocol or port. Services such as SMB are typically need a setting of 1, otherwise all the SMB tests
+	# will be performed on both 139 and 445.
+	$struct{'OnePerHost'}=0;
+
+	# $struct{'MaxInstances'} determines the maximum number of instances of this service that are allowed to run
+	# simultaneously, even if there is room in the budget to run more. This is to prevent some modules hogging
+	# all the resources. A value of 0 means that there is no limit (apart from the budget constraints).
+	$struct{'MaxInstances'}=0;
+
+	#	$struct{'ConflictingModules'} is an array containing the names (without file extensions) of modules which
+	# should prevent this one from running.
+	@{$struct{'ConflictingModules'}}=('');
+
+	# End parameter customisation
+	# >>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+	return $self;
+}
+
+sub activate {
+	# This is the subroutine that contains the actual code. 
+  # First, some code which will be common to all modules - setting up the environment
+	my $self=shift();
+	my $MainScan=$$self{'MainScan'};
+	my $target=shift();
+	my $file=shift();
+	my $threadID=Neet::threads->tid;
+	my $cost=$$self{'Cost'};
+	my $name=$$self{'Name'};
+	my $Config=$MainScan->Config;
+	my $Log=$MainScan->Log;
+	my ($host,$protport) = split (":", $target);
+	my $socket=$host;
+	my ($protocol,$port);
+	my $BasePrefix=$Config->GetVal("BasePrefix");
+	my $outputDir=$MainScan->ResultsDirectory . "/$host";
+	my $resourceDir=$MainScan->ResourceDirectory . "/modules/$name";
+	my ($targetType,$interface)=$MainScan->IsHostLocal($host);
+	($protocol,$port) = split ("/", $protport) if ($protport);
+	$socket .= ":$port" if ($port);
+	return 0 if ($protocol && $$self{'Protocol'} && ("$protocol" ne "$$self{'Protocol'}"));
+	# Don't scan if the host is cancelled
+	if ($MainScan->IsHostCancelled($host)){
+		$Log->Status ("$name (thread $threadID) -> scans against $target CANCELLED\n","LOGONLY");
+		return 0;
+	}
+	$0 = "Neet - GSM: $name thread $threadID testing $target";
+
+	if (!$self->IsScanComplete("$name","$target")){
+		# Tell the user what we're doing
+		$Log->Status ("GSM $name (thread $threadID) -> Scanning $socket ($targetType $interface)\n");
+
+		#>>>>>>>>>>>>     >>>>>>>>>>>>>   >>>>>>>>>>>>>   >>>>>>>>>>>>>
+		#>>>>>>>>>>>>> Beginning of module-specific code >>>>>>>>>>>>>>
+		#>>>>>>>>>>>>     >>>>>>>>>>>>>   >>>>>>>>>>>>>   >>>>>>>>>>>>>
+
+		# These are the variables you can use in your code:
+		# $target - the raw target specification as it is supplied to this subroutine by the scheduler.
+		#           Unless you want to process this for any particular reason, you're better off using the
+    	#           $host, $protocol, $port or $socket variables below.
+		# $file - the filename from which the target was selected. This is useful when your module is monitoring
+		# 					multiple files. You can use this to alter the behaviour of your module accordingly.
+		# $host - the IP address of the target
+		# $port - the port on which the service is listening (not set for "OnePerHost" modules)
+		# $protocol - the protocol on which the service is listening (not set for "OnePerHost" modules)
+		# $socket - same as $host, unless $port is set, in which case it is set to "$host:$port".
+		# $name - the name of this module
+		# $cost - the cost of this module
+		# $threadID - the Perl ithread ID for this thread
+		# $outputDir - the full absolute path to the directory of results for this $host
+		# $resourceDir - the full absolute path to the directory of resources for this module.
+		#                This is normally /opt/neet/resources/modules/$name, so for this
+		#                module, $resourceDir would be /opt/neet/resources/modules/Example
+		# $BasePrefix - the full absolute path to the neet installation - usually /opt/neet
+
+		# These are the objects you can access
+		# $self - This module
+		# $MainScan - MainScan object, which provides most of neet's method calls.
+		# $Config - The interface to the configuration file
+		# $Log - The interface to the logging and screen printing mechanism
+
+		# The API for recording issues is as follows:
+		# RecordIssue(target, label, text)
+		# RecordVulnerability(target, label, text)
+		#	RecordCompromise(target, label, text)
+		#	StoreGuessedPassword(target, level, service, username, password, label, text)
+		# MissingPatch(target, level, service, patch, label, text)
+		#	ConfigError(target, level, label, text)
+
+		# Include any Perl modules you may require
+
+		# Set up the signal handler for exiting cleanly
+		$SIG{'USR1'}=sub{
+			$self->SetScanInComplete("$name","$target");
+			Neet::threads->exit();
+		};
+
+		# And now the code for the actual test:
+
+		# <<< CODE GOES HERE >>>
+
+
+
+		#>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>
+		#>>>>>>>>>>>>> End of module-specific code >>>>>>>>>>>>>>
+		#>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>
+
+		# Don't modify anything below this line.
+		$self->SetScanComplete("$name","$target");
+	} else {
+		$Log->Status ("GSM $name (thread $threadID) -> $socket already scanned - skipping\n","LOGONLY");
+	}
+	$Log->Status ("GSM $name (thread $threadID) -> $socket FINISHED scanning\n");
+	return 0;
+}
+
+sub SingleScan {
+	my $self=shift;
+	return $$self{'OnePerHost'};
+}
+
+sub Name {
+	my $self=shift();
+	return $$self{'Name'};
+}
+sub Cost {
+	my $self=shift();
+	return $$self{'Cost'};
+}
+sub Enabled {
+	my $self=shift();
+	return $$self{'Enabled'};
+}
+sub Watching {
+	my $self=shift();
+	return @{$$self{'WatchFiles'}};
+}
+
+sub TargetSpec {
+	my $self=shift();
+	my $targetSpec=shift();
+	if (!defined($targetSpec)){
+		return $$self{'TargetSpec'};
+	} else {
+		$$self{'TargetSpec'}=$targetSpec;
+	}
+}
+
+sub IsScanComplete {
+	my $self=shift();
+	my $name=shift();
+	my $target=shift();
+	my ($host,$junk)=split ":", $target;
+	my $MainScan=$$self{'MainScan'};
+	my $scanName="GSM_${name}_$target";
+	return $MainScan->GetStatKey($MainScan->ResultsDirectory . "/$host/.gsmcomplete",$scanName);
+}
+
+sub SetScanComplete {
+	my $self=shift();
+	my $name=shift();
+	my $target=shift();
+	my ($host,$junk)=split ":", $target;
+	my $MainScan=$$self{'MainScan'};
+	my $scanName="GSM_${name}_$target";
+	$MainScan->SetStatKey($MainScan->ResultsDirectory . "/$host/.gsmcomplete",$scanName);
+	return 1;
+}
+
+sub SetScanInComplete {
+	my $self=shift();
+	my $name=shift();
+	my $target=shift();
+	my ($host,$junk)=split ":", $target;
+	my $MainScan=$$self{'MainScan'};
+	my $scanName="GSM_${name}_$target";
+	if ($MainScan->DelStatKey($MainScan->ResultsDirectory . "/$host/.gsmcomplete",$scanName)){
+		return 1;
+	} else {
+		return 0;
+	}
+}
+sub MaxInstances {
+	my $self=shift();
+	return $$self{'MaxInstances'};
+}
+sub ConflictsWith {
+	my $self=shift();
+	return @{$$self{'ConflictingModules'}};
+}
+
+1;
