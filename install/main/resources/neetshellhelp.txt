@@ -1,4 +1,4 @@
-*** Neet Shell Help version 1.0.2 ***
+*** Neet Shell Help version 1.0.3 ***
 
 ================
 General commands
