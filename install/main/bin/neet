@@ -1114,7 +1114,7 @@ if ($discoverServices){
 							}
 						} else {
 							# Looks like it was definitely up - we got a response
-							$MainScan->SetListItem($MainScan->ResultsDirectory . "liveHosts.txt",$Target);
+							$MainScan->SetListItem($MainScan->ResultsDirectory . "/liveHosts.txt",$Target);
 						}
 					}
 				}
