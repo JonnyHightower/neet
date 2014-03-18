@@ -163,6 +163,8 @@ done
 
 cd main
 cp helpers/* "${NEET}/helpers/bin/"
+cp -a upload/ "${NEET}/helpers/"
+
 for subdir in bin etc resources; do
 	cp -R "${subdir}" "${NEET}/"
 done
