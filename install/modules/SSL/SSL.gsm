@@ -237,6 +237,25 @@ sub activate {
 			$MainScan->SetStatValue("$outputDir/hostInfo.txt","vhost","$vhost");
 		}
 
+		# Check for insecure renegotiation
+		$MainScan->TimedSystem(20,"echo R | openssl s_client -connect ${host}:${port} > ${outputDir}/raw/openssl-renegotiate-${port}.txt 2>&1");
+		@sslFile=$MainScan->ReadFile("${outputDir}/raw/openssl-renegotiate-${port}.txt");
+		my ($secureSupported,$renegotiated)=(1,0);
+		for my $l (@sslFile){
+			next if (!$l);
+			if (index($l,"Secure Renegotiation IS NOT supported") == 0){
+				$secureSupported=0;
+			}
+			if (index($l,"RENEGOTIATING") == 0){
+				$renegotiated=1;
+			}
+		}
+		if ($renegotiated && !$secureSupported){
+			my $message="SSL service supports insecure renegotiaton";
+			$MainScan->RecordIssue($target,"GSM-SSL-7",$message);
+		}
+
+
 		#>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>
 		#>>>>>>>>>>>>> End of module-specific code >>>>>>>>>>>>>>
 		#>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>   >>>>>>>>>>>>

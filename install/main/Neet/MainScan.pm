@@ -174,6 +174,12 @@ sub new {
 		}
 	}
 
+	# Check that we actually have a configured network interface
+	if ($#InterfaceList <0){
+		$Log->Warn ("** ERROR: No configured network interfaces found. Exiting.\n");
+		exit 255;
+	}
+
 	# List VPN Interfaces
 	@{$scan{'VPNInterfaces'}} = split " ", $Config->GetVal("Interface.VPN");
 
@@ -787,7 +793,7 @@ sub GetNextAddress {
 	my $range=@{$$self{'ranges'}}[$$self{'RangeIndex'}];
 	return undef if (!defined($range));
 	my $ip=$range->getNextAddress;
-	if (!$ip){
+	if (!defined($ip)){
 		# Must be at the end of the range. Wrap.
 		$range->reset;
 		$$self{'RangeIndex'}++;
@@ -796,7 +802,7 @@ sub GetNextAddress {
 			$ip=$range->getNextAddress;
 		}
 	}
-	if (!$ip){
+	if (!defined($ip)){
 		# Must have come to the end
 		$$self{'RangeIndex'}=0; # This provides wrap-around
 		$$self{'GetNextAddressEndStop'}=1;
@@ -830,6 +836,10 @@ sub GetNextAddress {
 	} else {
 		# Failed to pick a route from the ones above. Use the default route.
 		$$self{'Interface'}=$$self{'Routes'}{'Default'}{'Interface'};
+		if (!defined($$self{'Interface'})){
+			$$self{'Log'}->Warn ("** ERROR: Can't scan $ip - no routes available.\n");
+			return 0;
+		}
 	}
 
 	# Determine if the target is on a local interface or not
@@ -1450,73 +1460,6 @@ sub TimedSystem {
 					return $string;
 				}
 			}
-			return 99;
-		}
-		return $error;
-	}
-	return undef;
-}
-
-sub TimedSystemRandomKill {
-	my $self=shift();
-	my $timeOut=shift();
-	my $command=shift();
-	my $quiet=shift();
-	if ($command){
-		$SIG{'ALRM'}=sub {
-			die ("TIMEOUT");
-		};
-		my $error;
-		eval {
-			$$self{'Log'}->Exec ("Timed execution ($timeOut) secs: $command") if (!$quiet);
-			alarm ($timeOut);
-			$error=system("$command");
-			alarm 0;
-		};
-
-		if ("$@" !~ /^TIMEOUT/){
-			$SIG{'ALRM'}='';
-			$error = $error >> 8;
-			return $error;
-		} else {
-			$$self{'Log'}->Warn ("Command timed out after $timeOut secs: $command","LOGONLY");
-			# Try to kill the process (in case it is using all the CPU time)
-			my ($junk,$baseCommand,$bin);
-			if (index($command,"cd")==0){
-				($junk,$baseCommand)=split " && ", $command; $bin = _toSpace($baseCommand);
-			} else {
-				$baseCommand = $command;
-				$bin=_toSpace($command);
-			}
-			my @proc=`ps a | grep "$baseCommand"`;
-			for my $_proc (@proc){
-				$_proc =~ s/^(\d+)[\s\S]{1,}$/$1/;
-				next if (!$_proc || $_proc !~ /\d+/);
-				next if ($_proc =~ /\D/);
-				if (-f "/proc/$_proc/cmdline"){
-					if (open(PROC,"/proc/$_proc/cmdline")){
-						my $_cmdline=<PROC>;
-						close PROC;
-						$baseCommand = _toSpace($baseCommand,">");
-						if (index($_cmdline,$baseCommand)>=0){
-							$$self{'Log'}->Warn("PID $$ KILLING runaway process PID $_proc ($baseCommand)\n");
-							kill 15, $_proc;
-						}
-					}
-				}
-			}
-
-			sub _toSpace {
-				my $string=shift();
-				my $delimit = shift();
-				$delimit=" " if (!$delimit);
-				if (index($string,"$delimit") < 0){
-					return $string;
-				}
-				return substr($string,0,index($string,"$delimit"));
-			}
-
-			$SIG{'ALRM'}='';
 			return 99;
 		}
 		return $error;
