@@ -9,7 +9,7 @@
 # The other functions are the actual user commands.
 
 # Config File
-VERSION=__VERSION__
+VERSION=1.0.3
 CONFIG="/opt/neet/etc/neet.conf"
 
 # Check we're in a valid directory

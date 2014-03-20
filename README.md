@@ -27,23 +27,23 @@ Neet is released under version 3 of the GNU Public License. See the LICENSE file
 Copyright 2007-2014 Jonathan Roach
 Email: jonnyhightower [at] funkygeek.com
 
-Some of the main features are:
-	Single interface to co-ordinate many tools
-	Portscans and service identification are done in batches, so useful results appear early on.
-	Easy to specify ranges to include and exclude, both for IP addresses and ports.
-	Doesn't create more traffic than is strictly necessary.
-	Detailed, timestamped logging
-	All raw tool output available, as well as sensibly-arranged output in text format.
-	Customisable speed and intensity
-	Reliable scanning from multiple interfaces and over VPNs
-	Scan control allows you to pause / resume the scan
-	Cancel scans on individual hosts.
-	Monitor progress of the scanning.
-	Very configurable.
-	Neet shell (neetsh) is bash shell with many aliases for getting through results quickly.
-	Exploitation for specific exploits included in the neet shell.
-	Dump credentials from remote hosts directly into your neet results without manually shunting files and commands between machines.
-	Documentation! man pages and "help" command in the neet shell.
+Some of the main features include:
+	Single interface to co-ordinate many tools;
+	Portscans and service identification are done in batches, so useful results appear early on;
+	Easy to specify ranges to include and exclude, both for IP addresses and ports;
+	Doesn't create more traffic than is strictly necessary;
+	Detailed, timestamped logging;
+	All raw tool output available, as well as sensibly-arranged output in text format;
+	Customisable speed and intensity;
+	Reliable scanning from multiple interfaces and over VPNs;
+	Scan control allows you to pause / resume the scan;
+	Cancel scans on individual hosts;
+	Monitor progress of the scanning;
+	Very configurable;
+	Neet shell (neetsh) is bash shell with many aliases for getting through results quickly;
+	Exploitation for specific exploits included in the neet shell;
+	Dump credentials from remote hosts directly into your neet results without manually shunting files and commands between machines;
+	Documentation! man pages and "help" command in the neet shell;
 	Many more.
 
 ** INSTALLATION **
