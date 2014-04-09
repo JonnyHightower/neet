@@ -9,7 +9,7 @@
 # The other functions are the actual user commands.
 
 # Config File
-VERSION=1.0.2
+VERSION=1.0.3
 CONFIG="/opt/neet/etc/neet.conf"
 
 # Check we're in a valid directory
@@ -518,7 +518,7 @@ function multikatz {
 				password=`echo $result | awk -F" : " {print'$3'}`
 				cd $ip
 				echo "Trying mimikatz against ${ip}..."
-				/usr/bin/mimikatz $ip "$account" "$password"
+				${HELPERS}/mimikatz $ip "$account" "$password"
 				cd "$NeetTLD"			
 				if [ -f "${ip}/passwords-${ip}.txt" ]; then
 					cat "${ip}/passwords-${ip}.txt" >> mimikatz-credentials.txt
@@ -1002,128 +1002,36 @@ function snmp {
 # **** Host Context Commands ****
 #   **********************
 
-function audit {
-	if [ -z $IP ]; then
-		echo "Switch to host mode to run an audit."
-	elif grep "^OSFamily Windows" hostInfo.txt >/dev/null 2>&1; then
-		if grep "^AddedAccount " hostInfo.txt >/dev/null 2>&1; then
-			if [ -z $2 ]; then
-				local user=`grep "^NewUser=" $CONFIG | awk -F= {print'$2'}`
-				local pass=`grep "^NewPassword=" $CONFIG | awk -F= {print'$2'}`
-				winaudit $IP "$user" "$pass"
-			else
-				winaudit $IP "$1" "$2"
-			fi
-		elif [ -z $2 ]; then
-			echo "Usage: audit <username> <password>"
-		else
-			winaudit $IP "$1" "$2"
-		fi
-	else
-		echo "Audit is currently implemented only for Windows hosts."
-	fi
+function gethash {
+	${HELPERS}/gethash $@
+}
+function mimikatz {
+	${HELPERS}/mimikatz $@
 }
 
 function hashdump {
 	if [ -z $IP ]; then
-		echo "Switch to host mode to dump hashes."
+		echo "Switch to host mode to dump hashes, or use the ${HELPERS}/gethash command."
 	elif grep "^OSFamily Windows" hostInfo.txt >/dev/null 2>&1; then
 		if grep "^AddedAccount " hostInfo.txt >/dev/null 2>&1; then
 			if [ -z $2 ]; then
 				local user=`grep "^NewUser=" $CONFIG | awk -F= {print'$2'}`
 				local pass=`grep "^NewPassword=" $CONFIG | awk -F= {print'$2'}`
-				gethash $IP "$user" "$pass"
+				${HELPERS}/gethash $IP "$user" "$pass"
 			else
-				gethash $IP "$1" "$2"
+				${HELPERS}/gethash $IP "$1" "$2"
 			fi
 		elif [ -z $2 ]; then
 			echo "Usage: hashdump <username> <password>"
 		else
-			gethash $IP "$1" "$2"
+			${HELPERS}/gethash $IP "$1" "$2"
 		fi
 	else
 		echo "Hashdump is implemented only for Windows hosts."
 	fi
 }
 
-function mbsa {
-	local enable=0
-	local USERPASS
-	CDIR=`basename $PWD`
-	if [ -z $IP ]; then
-		TARGET=$1
-		if [ -z $TARGET ] || [ ! -d $TARGET ] || [ $CDIR -ne $TARGET ]; then
-			echo "You need to specify a valid target IP address and valid credentials for the target host."
-			echo "Usage: mbsa [target] <username:password>"
-		else
-			if [ ! -z $2 ]; then
-				USERPASS="$2"
-				enable=1
-			else
-				echo "You need to specify a valid target IP address and valid credentials for the target host."
-				echo "Usage: mbsa [target] <username:password>"
-			fi		
-		fi
-	else
-		TARGET=$IP
-		if [ ! -z $1 ]; then
-			USERPASS="$1"
-			enable=1
-		else
-			echo "You need to specify valid credentials for the target host."
-			echo "Usage: mbsa [target] <username:password>"
-		fi		
-	fi
-
-
-	if [ ! -z $enable ] && [ $enable -eq 1 ]; then
-		local OUTFILE="MBSA-${TARGET}.txt"
-	
-		if [ -d $TARGET ]; then
-			OUTFILE="${TARGET}/MBSA.txt"
-		elif [ `basename $PWD` == $TARGET ]; then
-			OUTFILE="MBSA.txt"
-		fi
-
-		local WINHELP=`cat $CONFIG | grep ^Address.WindowsHelper= | awk -F= {print'$2'}`
-		local USER=`cat $CONFIG | grep ^Account.WindowsHelper= | awk -F= {print'$2'}`
-		local PASS=`cat $CONFIG | grep ^Password.WindowsHelper= | awk -F= {print'$2'}`
-
-		echo "Running MBSA against $TARGET from $WINHELP. Results will be stored in $OUTFILE."
-		echo "*** This will return to the shell once it's complete. Please allow around 5 minutes. ***"
-
-		if [ ! -z USERPASS ] && echo $USERPASS | grep : >/dev/null; then
-			local TUSER=`echo $USERPASS | awk -F: {print'$1'}`
-			local TPASS=`echo $USERPASS | awk -F: {print'$2'}`
-			echo
-			memo Running MBSA against $TARGET as user $TUSER
-			echo winshell $WINHELP "$USER" "$PASS" "C:\\Program Files\\Microsoft Baseline Security Analyzer 2\\mbsacli.exe /nd /u $TUSER /p $TPASS /target $TARGET"
-
-			winshell $WINHELP "$USER" "$PASS" "C:\\Program Files\\Microsoft Baseline Security Analyzer 2\\mbsacli.exe /nd /u $TUSER /p $TPASS /target $TARGET" 2>&1 > $OUTFILE
-			# 2>&1 > $OUTFILE
-			# Construct a batch file and then run it. This seems to be the only way to actually get the authentication
-			# to work between the Windows Helper and the Target machines.
-			#winshell $WINHELP "$USER" "$PASS" "cmd.exe /c echo net use \\\\\\$TARGET\\IPC\$ $TPASS /user:$TUSER > C:\\mbsa-$TARGET.bat" >/dev/null 2>&1 
-			#winshell $WINHELP "$USER" "$PASS" "cmd.exe /c echo \\\"C:\\Program Files\\Microsoft Baseline Security Analyzer 2\\mbsacli.exe\\\" /nd /target $TARGET >> C:\\mbsa-$TARGET.bat" >/dev/null 2>&1
-			#winshell $WINHELP "$USER" "$PASS" "cmd.exe /c echo net use \\\\\\$TARGET\\IPC\$ /delete >> C:\\mbsa-$TARGET.bat" >/dev/null 2>&1
-			#winshell $WINHELP "$USER" "$PASS" "C:\\mbsa-$TARGET.bat" > $OUTFILE 2>&1
-			#winshell $WINHELP "$USER" "$PASS" "cmd.exe /c del C:\\mbsa-$TARGET.bat" >/dev/null 2>&1 
-			#echo winshell $WINHELP "$USER" "$PASS" "C:\\Program Files\\Microsoft Baseline Security Analyzer 2\\mbsacli.exe /u $TUSER /p $TPASS /nd /target $TARGET"
-			# 2>&1 > $OUTFILE
-
-			echo "Finished running MBSA against $TARGET."
-
-		else
-			echo
-			echo "Did you supply credentials in the correct format?"
-			#memo Running anonymous MBSA against $TARGET
-			#winshell $WINHELP "$USER" "$PASS" "C:\\Program Files\\Microsoft Baseline Security Analyzer 2\\mbsacli.exe /nd /target  $TARGET" 2>&1 > $OUTFILE
-		fi
-		echo
-	fi
-}
-
-function shell {
+function psexec {
 	local od=$PWD
 	if [ -z $IP ]; then
 		echo "Switch to host mode to run shell."
@@ -1171,6 +1079,10 @@ function shell {
 	else
 		echo "Shell is implemented only for Windows hosts."
 	fi
+}
+
+function shell {
+	psexec "$1" "$2" "$3"
 }
 
 function ___shell {

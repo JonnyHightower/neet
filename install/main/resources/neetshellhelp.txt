@@ -1,4 +1,4 @@
-*** Neet Shell Help version 1.0.2 ***
+*** Neet Shell Help version 1.0.3 ***
 
 ================
 General commands
@@ -105,18 +105,20 @@ web [port] -> Open a web browser to the first web service on the machine
 webs -> Open a web browser tab for each HTTP/S service on the machine
 ts -> Rdesktop to Terminal Services on the machine
 vnc -> VNC to the machine
-
 exploit		-> If the machine has one or more remote vulnerabilities, you will be prompted to choose and exploit one
-audit		-> Run an on-host audit on the currently-selected host. If the host has been compromised
-         	   automatically by neet, the new account will be automatically used and no username/password
-        	   combination will need to be supplied. However, bear in mind that it is likely that the audit would
-	           have already been run by the AutoAudit module.
+
 hashdump 	-> Dump the hashes from the currently-selected host. If the host has been compromised
          	   automatically by neet, the new account will automatically be used and no username/password
          	   combination will need to be supplied.
-shell 		-> (Windows) - obtain a shell on a windows box. No need to specify credentials if neet has already
+
+psexec 		-> (Windows) - obtain a shell on a windows box. No need to specify credentials if neet has already
          	   compromised the box.
+
+shell 		-> (Windows) - obtain a shell on a windows box. No need to specify credentials if neet has already
+         	   compromised the box. Wrapper for psexec.
+
 meterpreter 	-> (Windows) - obtain a meterpreter session on a windows box (supply the credentials).
+
 iShellSQL	-> Connects to MS-SQL over its native port and gives a system shell using xp_cmdshell (if enabled).
 
 =============================================================================

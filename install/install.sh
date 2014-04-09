@@ -161,8 +161,12 @@ for dir in helpers/bin modules core; do
   mkdir -p "${NEET}/$dir" 2>/dev/null
 done
 
-cd main
+cp -R custom "${NEET}/"
+
+cd "${INST}/main"
 cp helpers/* "${NEET}/helpers/bin/"
+cp -a upload/ "${NEET}/helpers/"
+
 for subdir in bin etc resources; do
 	cp -R "${subdir}" "${NEET}/"
 done
@@ -282,16 +286,10 @@ fi
 # Patator
 echo "patator=${EXTBIN}/patator_v0.3.py" >> "${CONFDIR}/locations"
 
-# Metasploit Framework
-# PkgInstall framework3 "Metasploit_Framework 3"
- # Update the framework
- #[ -x ${NEET}/external/framework3/msfcli ] && cd ${NEET}/external/framework3 && svn update
- cd $INST
+cd $INST
 
-# Metasploit Framework
+# Metasploit Framework 2
  PkgInstall framework2 "Metasploit_Framework 2"
- # Update the framework
- #[ -x ${NEET}/external/framework2/msfcli ] && cd ${NEET}/external/framework2 && svn update
  cd $INST
 
 # Ensure that the location information is up to date

