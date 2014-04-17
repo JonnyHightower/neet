@@ -225,7 +225,7 @@ sub getPath {
 	my $bin=shift();
 	my $path=$$self{'Binaries'}->GetVal("$bin");
 	if ((!defined($path)) || (length($path)==0)){
-		$$self{'Log'}->Warn ("Couldn't find quick path for $bin");
+		$$self{'Log'}->Warn ("Couldn't find quick path for $bin","LOGONLY");
 		for my $dir (split ":", $ENV{'PATH'}){
 			if (-f "${dir}/$bin"){
 				$path="${dir}/$bin";

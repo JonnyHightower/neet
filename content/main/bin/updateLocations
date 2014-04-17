@@ -24,11 +24,15 @@
 
 # Check that we have a proper representation of the binary
 # paths
-export CONFDIR="/opt/neet/etc"
+export NEET="/opt/neet"
+export CONFDIR="${NEET}/etc"
 
-for bin in nmap tcptraceroute traceroute hydra wget sslscan dig rpcclient net snmpwalk ruby java \
+rm -f "${CONFDIR}/locations"
+echo "neet=$NEET" > "${CONFDIR}/locations"
+
+for bin in nmap amap tcptraceroute traceroute hydra wget sslscan dig rpcclient net snmpwalk ruby java \
 					 ldapsearch medusa smbclient snmpget snmpset nmblookup rpcinfo xwd ntpdate ldapsearch \
-					 openssl; do
+					 openssl openvas-nasl; do
 
 	if type $bin >/dev/null 2>&1; then
     if ! grep ^${bin}= "${CONFDIR}/locations" >/dev/null 2>&1; then
@@ -44,14 +48,15 @@ for bin in nmap tcptraceroute traceroute hydra wget sslscan dig rpcclient net sn
 
 done
 
-
-#for bin in sbg tnsenum amap on ; do
-#	[ -f ${NEET}/pkg/bin/$bin ] && echo "${bin}=${NEET}/pkg/bin/$bin" >> "${CONFDIR}/locations"
-#done
 OWD="$PWD"
-cd ${NEET}/pkg/bin/
-	for bin in *; do
+for bin in *; do
+	if ! grep ^${bin}= "${CONFDIR}/locations" >/dev/null 2>&1; then
 		echo "${bin}=${NEET}/pkg/bin/$bin" >> "${CONFDIR}/locations"
-	done
+	else
+  	cat "${CONFDIR}/locations" | grep -v ^${bin}= > "${CONFDIR}/locations.tmp"
+    mv "${CONFDIR}/locations.tmp" "${CONFDIR}/locations"
+		echo "${bin}=${NEET}/pkg/bin/$bin" >> "${CONFDIR}/locations"
+	fi
+done
 cd "$OWD"
 

@@ -47,8 +47,6 @@ if [ ! -d "${NEET}/bin" ]; then
 fi
 
 # Config information
-echo "neetbase=${NEET}" > "${CONFDIR}/locations"
-cat install/locations >> "${CONFDIR}/locations"
 cp install/installsupport install/githubVersion "${NEET}/core/"
 
 cd main
