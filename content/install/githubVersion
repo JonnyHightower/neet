@@ -1,0 +1,60 @@
+#!/usr/bin/perl -w
+
+# Takes a GitHub neet repo name, and returns the version information that's in the MASTER branch.
+
+use strict;
+
+my $repo=$ARGV[0];
+my $testAgainst=$ARGV[1];
+if (!$repo || (index($repo,"neet") != 0)  ) {
+	print STDERR "Usage: $0 <neet-repo> [<installed version>]\n";
+	exit 1;
+}
+
+my $version;
+my $URI="https://github.com/JonnyHightower/$repo/blob/master/install/install/VERSION";
+my @data=`wget "$URI" -q -O - 2>&1`;
+#my @data;
+#push @data, "blob-line-code>1.2.0<dash>";
+for my $line (@data){
+	next if (index($line,"blob-line-code")<0);
+	$line =~ s/\r//g;
+	$line =~ s/^[\s\S]+>(\d+\.\d+\.\d+)<[\s\S]+$/$1/;
+	next if ($line !~ /^\d+\.\d+\.\d+$/);
+	if ($testAgainst && ($testAgainst =~ /^\d+\.\d+\.\d+$/)){
+		my @latest=split "\\.", $line;
+		my @installed=split "\\.", $testAgainst;
+		my $updateAvailable=1;
+		if ($latest[0] > $installed[0]){
+			$updateAvailable=1;
+		} elsif ($latest[0] < $installed[0]){
+			$updateAvailable=0;
+		} else {
+			if ($latest[1] > $installed[1]){
+				$updateAvailable=1;
+			} elsif ($latest[1] < $installed[1]){
+				$updateAvailable=0;
+			} else {
+				if ($latest[2] > $installed[2]){
+					$updateAvailable=1;
+				} else {
+					$updateAvailable=0;
+				}
+			}
+		}
+
+		if ($updateAvailable){
+			print "$line\n";
+			exit 0;
+		} else {
+			exit 0;
+		}
+	} else {
+		print "$line\n";
+		exit 0;	
+	}
+}
+exit 1;
+
+
+

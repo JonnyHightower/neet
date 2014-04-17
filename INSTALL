@@ -30,7 +30,8 @@ will pre-fetch certain dependencies for you as long as you have a
 working Internet connection that your package manager can use. In these
 cases installation is an extremely simple process.
 
-In all cases, start the installation process by changing into the
-"install" directory and running "./install.sh" as root. 
+In all cases, start the installation process by running "./install.sh"
+as root.
+
 
 
