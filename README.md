@@ -10,7 +10,9 @@ It's not magic, but it does what it says on the tin: network enumeration and exp
 
 There's also a customised shell which takes a lot of the common tasks you'd normally perform and rolls them into simple tasks. For example, the win command lists the Windows hosts on the network, and cross-references them against issues and vulnerabilities found to give you a colour-coded list of live hosts.
 
-And there's documentation too! Check out the man pages, and the help command inside the neet shell. 
+And there's documentation too! Check out the man pages, the help command inside the neet shell, and the HTML Wiki document in /opt/neet/doc.
+
+NEW in 1.10: Online incremental updates mean that you can get the latest version without reinstalling. Only the updated components will be downloaded and installed.
 
 IN OTHER WORDS...
 
@@ -28,22 +30,41 @@ Copyright 2007-2014 Jonathan Roach
 Email: jonnyhightower [at] funkygeek.com
 
 Some of the main features include:
+
 	Single interface to co-ordinate many tools;
+
 	Portscans and service identification are done in batches, so useful results appear early on;
+
 	Easy to specify ranges to include and exclude, both for IP addresses and ports;
+
 	Doesn't create more traffic than is strictly necessary;
+
 	Detailed, timestamped logging;
+
 	All raw tool output available, as well as sensibly-arranged output in text format;
+
 	Customisable speed and intensity;
+
 	Reliable scanning from multiple interfaces and over VPNs;
+
 	Scan control allows you to pause / resume the scan;
+
 	Cancel scans on individual hosts;
+
 	Monitor progress of the scanning;
+
 	Very configurable;
+
 	Neet shell (neetsh) is bash shell with many aliases for getting through results quickly;
+
 	Exploitation for specific exploits included in the neet shell;
+
 	Dump credentials from remote hosts directly into your neet results without manually shunting files and commands between machines;
+
+	Online incremental updates without having to do a full reinstall each time;
+
 	Documentation! man pages and "help" command in the neet shell;
+
 	Many more.
 
 ** INSTALLATION **

@@ -1,0 +1,123 @@
+#!/bin/bash
+
+##########################################################################
+#
+#    Neet: Network discovery, enumeration and security assessment tool
+#    Copyright (C) 2008-2014 Jonathan Roach
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#    Contact: jonnyhightower [at] funkygeek.com
+#
+##########################################################################
+
+if [ `id -u` -ne 0 ]; then
+	echo "You must be root to update Neet."
+	exit 1
+fi
+
+export INVOKEDBYNEETUPDATE=1
+export PREFIX=/opt
+export NEET="${PREFIX}/neet"
+export CONFDIR="${NEET}/etc"
+export CONFIG="${CONFDIR}/neet.conf"
+export INST=${PWD}
+
+if [ ! -f "${NEET}/core/installsupport" ]; then
+	echo "Couldn't locate the install support file. Exiting."
+	exit 1
+else
+	. "${NEET}/core/installsupport"
+fi
+
+#https://github.com/JonnyHightower/neet/archive/1.0.2.tar.gz
+
+BASEURI="https://github.com/JonnyHightower/REPO/archive/VERSION.tar.gz"
+REPOS="neet neet-deps neet-bundled neet-shell neet-upload neet-resources neet-modules"
+owd="$PWD"
+# The basic gist is to check each repo to see if it contains a newer version than
+# the locally-installed version.
+
+echo " + Checking for updated neet components..."
+for repo in $REPOS; do
+	localOnly=0
+	cd "${NEET}/core/update"
+
+	#echo " + Checking repo $repo"
+	installed=`getVersion $repo`
+
+	# For local testing
+	if [ -f "stage-$repo" ]; then
+		localOnly=1
+		remote=`cat "stage-$repo"`
+	else
+		remote=`${NEET}/core/githubVersion $repo $installed`
+		if [ -z $remote ]; then
+			if [ "$installed" != "0.0.0" ]; then
+				echo " - Package $repo is at the latest version ($installed)."
+			else
+				echo " - Package $repo is not available."
+			fi
+			continue
+		fi
+	fi
+
+	REPO=`echo $BASEURI | sed -e "s/REPO/$repo/" -e "s/VERSION/$remote/"`
+
+	echo " + Downloading and installing $repo version $remote"
+	echo "   > $REPO"
+
+	# Again - to facilitate local testing
+	if [ $localOnly -eq 0 ]; then
+		rm -f "${repo}.tar.gz" # Just in case an old version already exists
+		wget "$REPO" -q -O "${repo}.tar.gz"
+		if [ $? -gt 0 ]; then
+			echo "   - There was an error downloading this component. Not updating."
+			rm -f "${repo}.tar.gz"
+			continue
+		fi
+	fi
+
+	if [ -f "${repo}.tar.gz" ]; then
+		# Extract the tarball
+		archive="${repo}-${remote}"
+		rm -rf "$archive" # Just in case
+
+		tar xzf "${repo}.tar.gz"
+		if [ $? -gt 0 ]; then
+			echo "   ! Error extracting $repo"
+			echo "     Not updating this component."
+			rm -f "${repo}.tar.gz"
+			continue
+		fi
+		if [ -x "${archive}/install.sh" ]; then
+			#echo "  + Installing component $repo version $remote..."
+			cd "$archive"
+			./install.sh
+
+			# Clean up afterwards
+			cd "${NEET}/core/update"
+			rm -rf "$archive"
+			rm -f "${repo}.tar.gz"
+			rm -f "stage-$repo"
+		else
+			echo "   ! Got component $repo version $remote but can't install it!"
+		fi
+	
+	else
+		echo "   - Could not find this component. Not updating."
+	fi
+
+done
+

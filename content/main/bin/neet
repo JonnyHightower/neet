@@ -1,0 +1,1673 @@
+#!/usr/bin/perl -w
+
+##########################################################################
+#
+#    Neet: Network discovery, enumeration and security assessment tool
+#    Copyright (C) 2008-2014 Jonathan Roach
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+#    Contact: jonnyhightower [at] funkygeek.com
+#
+##########################################################################
+
+# Ensure we can find our Perl modules
+BEGIN {
+	unshift @INC, "/opt/neet/core";
+}
+
+# Public Modules
+use strict;
+use NetAddr::IP qw(:old_nth);
+use Storable;
+use Term::ReadKey;
+use Time::HiRes qw( usleep ualarm );
+use Fcntl ':flock';
+
+# Neet-specific Modules
+use Neet::Logging;
+use Neet::MainScan;
+use Neet::ServiceDiscovery;
+use Neet::OSDetect;
+use Neet::Util;
+use Neet::GlobalServiceMonitor;
+use Neet::API;
+use Neet::threads;
+
+# Jon Roach's General Modules
+use JR::Files::Config;
+use JR::NetUtils::Ranges;
+use JR::NetUtils::NetUtils;
+use JR::Parsers::OutputParser;
+use JR::Parsers::CLI;
+use JR::Parsers::Nmap;
+
+my $VERSION="1.1.0";
+
+my $UID=`/usr/bin/id -u`; chomp $UID;
+if ($UID > 0){
+	print "You need to be root to run Neet. This is because of the privileges required " .
+	"to run some scanning and testing tools.\n";
+	exit 1;
+}
+
+# If these environment variables are missing, we are probably being run sudo
+if (!$ENV{'PWD'}){
+	$ENV{'PWD'}=`pwd`; chomp $ENV{'PWD'};
+}
+
+# Command-line
+my $CLI=JR::Parsers::CLI->new('cB:boADIdkUhLldgpqQNxH:m@M@t@T@u@U@X@s:i:f@F@n@O@z');
+$CLI->LongShortMap ( 'debug'=>'D', 'budget'=>'B', 'nodns'=>'d', 'aix'=>'A', 'overlap'=>'o',
+							'help'=>'h', 'list-targets'=>'L', 'exclude-host'=>'X', 'exclude-tcp'=>'T', 'noautobudget'=>'b',
+							'exclude-udp'=>'U', 'include-tcp'=>'t', 'include-udp'=>'u', 'limited-patience'=>'l',
+							'host-list'=>'f', 'exclude-hosts'=>'F', 'speed'=>'s', 'kid-gloves'=>'k',
+							'intensity'=>'i','threads'=>'H','module'=>'m','disable-module'=>'M','pingscan'=>'p','internet'=>'I',
+							'nogsm'=>'g','noscan-named'=>'N','noscan-range'=>'n','exclude-os'=>'O',
+							'min-udp'=>'q', 'min-tcp'=>'Q' , 'no-auto'=>'x', 'connect'=>'c','update'=>'z');
+$CLI->Process(@ARGV);
+
+# In case the user wanted to run neet-update
+if ($CLI->Got('z') && (-f "/opt/neet/bin/neet-update")){
+	my ($tries,$timeout)=(2,7);
+
+	# Update and exit
+	my $rc=system("wget https://github.com/JonnyHightower/neet -q --tries=$tries --timeout=$timeout -O - >/dev/null");
+	$rc=$rc >> 8;
+	if ($rc){
+		print STDERR "Couldn't connect to GitHub. I made $tries attempts, with a ${timeout}-second timeout each time.\n" .
+								 "I suggest double-checking your proxy settings and trying again.\n";
+		exit $rc;
+	}
+	$rc=system("/opt/neet/bin/neet-update");
+	$rc=$rc >> 8;
+	exit $rc;
+}
+
+# Not updating.
+
+$0="Neet $VERSION initialising...";
+
+# Ignore these signals - we'll set up our own signal handling later....
+#$SIG{'__DIE__'}=sub{};
+#$SIG{'__WARN__'}=sub{};
+
+# Default SIGNAL handler for the threads
+$SIG{'USR1'} = sub {
+	Neet::threads->exit();
+};
+
+my $CONFIG_FILE="/opt/neet/etc/neet.conf";
+my $BINARIES="/opt/neet/etc/locations";
+
+my $Config=Config->new($CONFIG_FILE);
+my $Binaries=Config->new($BINARIES);
+
+if (!$Config){
+	die "Couldn't read config file $CONFIG_FILE\n";
+}
+
+# Logging
+my $Log=Neet::Logging->new();
+
+# Sort out the colouring
+my $InverseVideo = $Config->GetVal("InverseVideo");
+if ($InverseVideo && ($InverseVideo == 1)){
+	$Log->AltColour(1);
+}
+
+mkdir ("logs");
+$Log->LogFile("logs/" . $Config->GetVal("LogFile"));
+# Preserve log files from previous sessions
+if (-f "logs/" . $Config->GetVal("LogFile")){
+	system ("cat logs/" . $Config->GetVal("LogFile") . " >> logs/" . $Config->GetVal("LogFile") . "-archive && rm logs/" . $Config->GetVal("LogFile"));
+}
+$Log->OpenLog;
+#system("clear");
+$Log->Info ("This is neet $VERSION - initialising...\n");
+print "\n\tCopyright (C) 2008-2014 Jonathan Roach\n" .
+      "\tThis program comes with ABSOLUTELY NO WARRANTY\n" .
+      "\tThis is free software, and you are welcome to redistribute it\n" .
+      "\tunder certain conditions; view the accompanying LICENSE for details.\n\n";
+
+my ($neetXprocess,$neetXoriginator)=(0,0);
+if ($Config->GetVal("NeetXTerminalAutoOpen") eq "1"){
+	# Switch to a new X window if we're started in X
+	if (-f ".neetX"){
+		$neetXprocess=1;
+		if (! -f ".neetXlock"){
+			if (open(CLI,">.neetXlock")){
+				print CLI "$$\n";
+				close CLI;
+				$neetXoriginator=1;
+			}
+		}
+	}
+
+	# If we're in X, and we've been started directly by the user,
+	# spawn a new (wider) window containing the actual neet
+	# session that will run.
+	if (!$neetXprocess && defined($ENV{'DISPLAY'})){
+		my $OpenWin=1;
+		# Store the command-line
+		if (open(CLI,">.neetX")){
+			close CLI;
+		} else {
+			$OpenWin=0;
+		}
+		if ($OpenWin){
+			# Start the neet X window
+			my $neetX=0;
+			$Log->Status ("Starting neet X window\n");
+			my $ARGS=join (" ", @ARGV);
+			$neetX=fork();
+			if (!$neetX){
+				my $cmd=$Config->GetVal("NeetTerminal");
+				if (!$cmd){
+					$cmd="xterm -geometry 120x30 -T TITLE -e MONITOR";
+				}
+				$cmd =~ s?TITLE?"Neet - Command Window"?g;
+				$cmd =~ s?MONITOR?neet $ARGS?g;
+				#$cmd =~ s?MONITOR?/bin/bash -c "echo $ARGS && /bin/bash"?g;
+				exec ("$cmd >/dev/null 2>&1");
+				exit 0;
+			} else {
+				$Log->Info ("Started neet X Window PID $neetX\n");
+				exit 0;
+			}
+		}
+	}
+} else {
+	if (!$neetXprocess && defined($ENV{'DISPLAY'})){
+		# Warn the user they might want to stretch their terminal a bit
+		my ($width,$height,@junk)=GetTerminalSize();
+		my ($minwidth,$minheight)=(115,25);
+		my $msg="Your terminal is only ";
+		my $rec="The minimum recommended size for a neet terminal is $minwidth x $minheight. You are advised to resize your terminal!";
+		if ($width < $minwidth){
+			$msg .= "$width characters wide";
+		}
+		if ($height < $minheight){
+			$msg .= " and " if ($width < $minwidth);
+			$msg .= "$height characters high";
+		}
+		if (($height < $minheight) || ($width < $minwidth)){
+			$Log->Warn("$msg. $rec\n");
+			sleep 3;
+		}
+	}
+}
+
+# New scan object
+my $MainScan=Neet::MainScan->new($Config,$Binaries,$Log);
+my $MaxServiceDiscoveryThreads=$Config->GetVal("Threads.SDM");
+my $numPhases=$MainScan->Phases;
+my $CPUs=$MainScan->CPUs;
+
+# Set up the control directory.
+my $controlDirectory=".neet";
+$MainScan->ControlDirectory($controlDirectory);
+
+# Program mode flags
+my $help=0;
+my $list=0;
+my $autoManageBudget=1;
+my $rungsms=1;
+my $wantToResume=0;
+my $wantCleanup=0;
+my $resumeScanDownHosts=0;
+my $resumeScanOnlyDownHosts=0;
+my $discoverServices=1;
+my $resuming=0;
+my $userChose=0;
+my $revDNS=1;
+my $GSMRunning=0;
+my $ScanNamed=1;
+my @NoScanRanges=();
+my $fullUDP=1;
+my $fullTCP=1;
+my $internet=0;
+my $connect=0;
+my $limitedPatience=0;
+my $startMainScansBeforeNamedScansComplete=0;
+my $autoExploitSafe=0;
+my $GotSIGINT=0;
+my $GSMBudget = $Config->GetVal("Budget.GSM");
+$GSMBudget=400 if (!$GSMBudget);
+
+# How much budget does it cost to run each SDM instance?
+my $ServiceDiscoveryModuleCost=10;
+
+# Load average target for the system's auto-performance tuning
+# This is the basic load average PER CPU * 100. You can keep this target the
+# same even if you have multiple CPU cores, because the load average measured by
+# neet (from /proc/loadavg) is aggregated over the number of CPU cores in the system.
+my $SystemLoadTarget=350;
+
+$SIG{'INT'}=sub{
+	$GotSIGINT=1;
+	$Log->Info("Caught SIGINT - Preparing to pause the scan!");
+};
+
+# Log about start
+if ($CLI->CommandLine){
+	$Log->OK("neet invoked with " . $CLI->CommandLine . "\n",'LOGONLY');
+} else {
+	$Log->OK("neet invoked with no arguments\n",'LOGONLY');
+}
+
+# Check if we had -R, -S or -h on the command line
+#$wantToResume=1 if ($CLI->Got('R'));
+
+#if ($CLI->Got('S')){
+#		$wantToResume=1;
+#		$wantCleanup=1;
+#}
+
+$MainScan->Debug(1) if ($CLI->Got('D'));
+$help=1 if ($CLI->Got('h'));
+$list=1 if ($CLI->Got('L'));
+$revDNS=0 if ($CLI->Got('d'));
+
+if (!($list || $help)){
+ if ($MainScan->WasPaused || $MainScan->HadFinished){
+	$MainScan->PreviousScan(1);
+ }
+
+ if (!$MainScan->WasPaused && $wantToResume){
+	$Log->Warn ("** ERROR: Resume mode requested, but no paused scan was found.\n");
+	__exit(1);
+ }
+
+ if ($MainScan->WasPaused && !$wantToResume){
+	$Log->Alert ("A paused scan was found, but you didn't specify that you wanted to resume.\n",'PRINTONLY');
+	$Log->Info ("Options:\n\t1\tResume the paused scan keeping the same options: (" . $MainScan->PreviousCommandLine . ")\n",'PRINTONLY');
+	$Log->Info ("\t2\tResume the paused scan keeping the same options WITHOUT running the service discovery modules\n",'PRINTONLY');
+	$Log->Info ("\t3\tResume the paused scan but with the new options: (" . $CLI->CommandLine . ")\n",'PRINTONLY') if ($CLI->CommandLine);
+	$Log->Info ("\t4\tClear results and re-scan with the previous options: (" . $MainScan->PreviousCommandLine . ")\n",'PRINTONLY');
+	$Log->Info ("\t5\tClear results and carry on with current options: " . $CLI->CommandLine . "\n",'PRINTONLY') if ($CLI->CommandLine);
+	$Log->Info ("\tAny other key => Abort\n");
+	my $key=GetKey();
+	$userChose=1;
+	if ("$key" eq "1"){
+		$Log->OK ("Resuming paused scan\n");
+		$wantToResume=1;
+	} elsif ("$key" eq "2"){
+		$Log->OK ("Resuming paused scan WITHOUT service discovery\n");
+		$wantToResume=1;
+		$discoverServices=0;
+	} elsif ("$key" eq "4"){
+		$Log->OK ("Clearing results and scanning using previous options\n");
+		$wantToResume=1;
+		$wantCleanup=1;
+	} elsif ($CLI->CommandLine && "$key" eq "3"){
+		$Log->OK ("Resuming paused scan but scanning using current options\n");
+	} elsif ($CLI->CommandLine && "$key" eq "5"){
+		$Log->OK ("Clearing results and scanning using current options\n");
+		$wantCleanup=1;
+	} else {
+		$Log->Warn ("Aborted by user\n");
+		$MainScan->Abort;
+		__exit (0);
+	}
+ }
+
+ if ($MainScan->HadFinished){
+	$Log->Alert ("A previously completed scan was found.\n");
+	$Log->Info ("Options:\n\t1\tClear results and re-scan with the options from the previous scan: (" . $MainScan->PreviousCommandLine . ")\n",'PRINTONLY');
+	$Log->Info ("\t2\tDO NOT clear results; just re-scan with the options from the previous scan: (" . $MainScan->PreviousCommandLine . ")\n",'PRINTONLY');
+	$Log->Info ("\t3\tDO NOT clear results; re-scan with the options from the previous scan WITHOUT running the service discovery modules\n",'PRINTONLY');
+	$Log->Info ("\t4\tDO NOT clear results, but re-scan with the current options: (" . $CLI->CommandLine . ")\n",'PRINTONLY') if ($CLI->CommandLine);
+	$Log->Info ("\t5\tClear results and carry on with current options (" . $CLI->CommandLine . ")\n",'PRINTONLY') if ($CLI->CommandLine);
+	$Log->Info ("\tAny other key => Abort\n");
+	my $key=GetKey();
+	$userChose=1;
+	if ($CLI->CommandLine && "$key" eq "5"){
+		$Log->OK ("Clearing results and using current options\n");
+		$wantCleanup=1;
+	} elsif ($CLI->CommandLine && "$key" eq "4"){
+		$Log->OK ("NOT clearing results. Scanning using current options\n");
+	} elsif ("$key" eq "3"){
+		$Log->OK ("NOT clearing results. Resuming scan using previous options WITHOUT running service discovery modules\n");
+		$wantToResume=1;
+		$discoverServices=0;
+	} elsif ("$key" eq "2"){
+		$Log->OK ("NOT clearing results. Resuming scan using previous options\n");
+		$wantToResume=1;
+	} elsif ("$key" eq "1"){
+		$Log->OK ("Clearing results and scanning using previous options\n");
+		$wantToResume=1;
+		$wantCleanup=1;
+	} else {
+		$Log->Warn ("Aborted by user\n");
+		$MainScan->Abort;
+		__exit (0);
+	}
+ }
+
+ if ($wantToResume){
+	undef($CLI); $CLI=JR::Parsers::CLI->new('cB:boADIdkUhLlgdpqQNxH:m@M@t@T@u@U@X@s:i:f@F@n@O@');
+	$CLI->LongShortMap ( 'debug'=>'D', 'budget'=>'B', 'nodns'=>'d', 'aix'=>'A', 'overlap'=>'o',
+							'help'=>'h', 'list-targets'=>'L', 'exclude-host'=>'X', 'exclude-tcp'=>'T', 'noautobudget'=>'b',
+							'exclude-udp'=>'U', 'include-tcp'=>'t', 'include-udp'=>'u',  'limited-patience'=>'l',
+							'host-list'=>'f', 'exclude-hosts'=>'F', 'speed'=>'s', 'kid-gloves'=>'k',
+							'intensity'=>'i', 'threads'=>'H','module'=>'m','disable-module'=>'M','pingscan'=>'p','internet'=>'I',
+							'nogsm'=>'g','noscan-named'=>'N','noscan-range'=>'n','exclude-os'=>'O',
+							'min-udp'=>'q', 'min-tcp'=>'Q', 'no-auto'=>'x', 'connect'=>'c');
+
+	$CLI->Process(split " ", $MainScan->PreviousCommandLine);
+	$MainScan->Resumed(1);
+	if ($discoverServices && $userChose && (!$wantCleanup)){
+		$Log->Alert ("Will ignore hosts that were DOWN in the last scan run.\n");
+		$Log->Info ("Options:\n\t1\tContinue anyway\n",'PRINTONLY');
+		$Log->Info ("\t2\tInclude hosts that were DOWN in the last scan run\n",'PRINTONLY');
+		$Log->Info ("\t3\tRe-check ONLY hosts that were DOWN in the last scan run\n",'PRINTONLY');
+		$Log->Info ("\tAny other key => Abort\n",'PRINTONLY');
+		my $key=GetKey();
+		$userChose=1;
+		if ($CLI->CommandLine && "$key" eq "1"){
+			$Log->OK ("Continuing - ignoring hosts that were DOWN in the last scan run...\n");
+			$resumeScanDownHosts=0;
+			$resumeScanOnlyDownHosts=0;
+		} elsif ($CLI->CommandLine && "$key" eq "2"){
+			$Log->OK ("Including hosts that were DOWN in the last scan run...\n");
+			$resumeScanDownHosts=1;
+			$resumeScanOnlyDownHosts=0;
+		} elsif ("$key" eq "3"){
+			$Log->OK ("Re-checking ONLY the hosts that were DOWN in the last scan run...\n");
+			$resumeScanDownHosts=1;
+			$resumeScanOnlyDownHosts=1;
+		} else {
+			$Log->Warn ("Aborted by user\n");
+			$MainScan->Abort;
+			__exit (0);
+		}
+	}
+ }
+}
+
+# Main command-line option processing
+
+if ($CLI->Got('I')){
+	$internet=1;
+	$MainScan->Internet(1);
+	$MaxServiceDiscoveryThreads=$Config->GetVal("Threads.internet.SDM");
+}
+
+$help=1 if ($CLI->Got('h'));
+$list=1 if ($CLI->Got('L'));
+$rungsms=0 if ($CLI->Got('g'));
+$ScanNamed=0 if ($CLI->Got('N'));
+$revDNS=0 if ($CLI->Got('d'));
+
+if ($CLI->Got('l')){
+	$limitedPatience=1;
+}
+if ($CLI->Got('q')){
+	$fullUDP=0;
+}
+if ($CLI->Got('Q')){
+	$fullTCP=0;
+}
+if ($CLI->Got('x')){
+	$autoExploitSafe=0;
+}
+$MainScan->AutoExploit($autoExploitSafe);
+
+if ($CLI->Got('o')){
+	$startMainScansBeforeNamedScansComplete=1;
+}
+
+if ($CLI->Got('t')){
+	for my $val ($CLI->ValuesOf('t')){
+		if ($val =~ /^(\d+[-,]??\d+){1,}$/){
+			$MainScan->IncludeTCPPorts($val);
+		} else {
+			$Log->Warn ("** ERROR: Invalid TCP port range specification for inclusion: $val\n");
+			$help=1;
+		}
+	}
+}
+
+if ($CLI->Got('m')){
+	for my $val ($CLI->ValuesOf('m')){
+		$MainScan->addGsm($val);
+		$MainScan->LimitGsms('1');
+	}
+}
+
+if ($CLI->Got('O')){
+	for my $val ($CLI->ValuesOf('O')){
+		$MainScan->ExcludeOS($val);
+	}
+}
+
+
+if ($CLI->Got('M')){
+	for my $val ($CLI->ValuesOf('M')){
+		$MainScan->delGsm($val);
+	}
+}
+
+if ($CLI->Got('H')){
+	my $val=$CLI->Value('H');
+	if (($val =~ /^\d+$/) && ($val > 0) && ($val < 255)){
+		$MaxServiceDiscoveryThreads=$val;
+	} else {
+		$Log->Warn ("** ERROR: Invalid number of threads: $val\n");
+		$help=1;
+	}
+}
+
+if ($CLI->Got('i')){
+	my $val=$CLI->Value('i');
+	if (($val =~ /^light$/) || ($val =~ /^normal$/) || ($val =~ /^heavy$/)){
+		$MainScan->Intensity($val);
+	} else {
+		$Log->Warn ("** ERROR: Invalid intensity specification: $val\n");
+		$help=1;
+	}
+}
+if ($CLI->Got('B')){
+	$GSMBudget=$CLI->Value('B');
+}
+
+if ($CLI->Got('s')){
+	my $val=$CLI->Value('s');
+	if (($val =~ /^paranoid$/) || ($val =~ /^slow$/) || ($val =~ /^normal$/) || ($val =~ /^fast$/) || ($val =~ /^insane$/)){
+		$MainScan->Speed($val);
+	} else {
+		$Log->Warn ("** ERROR: Invalid speed specification: $val\n");
+		$help=1;
+	}
+}
+
+if ($CLI->Got('p')){
+	$MainScan->PingScan(1);
+}
+
+if ($CLI->Got('n')) {
+	for my $val ($CLI->ValuesOf('n')){
+		push @NoScanRanges,$val if ($val);
+	}
+}
+if ($CLI->Got('b')){
+	$autoManageBudget=0;
+}
+
+if ($CLI->Got('f')){
+	for my $val ($CLI->ValuesOf('f')){
+		if ($val){
+			if (!$MainScan->AddFile($val)){
+				$Log->Warn ("** ERROR: couldn't add addresses from file: $val\n");
+				$help=1;
+			}
+		} else {
+				$Log->Warn ("** ERROR: didn't specify file from which to load addresses\n");
+				$help=1;
+		}
+	}
+}
+
+if ($CLI->Got('F')){
+	for my $val ($CLI->ValuesOf('F')){
+		if ($val){
+			if (!$MainScan->AddExcludeFile($val)){
+				$Log->Warn ("** ERROR: couldn't exclude addresses from file: $val\n");
+				$help=1;
+			}
+		} else {
+				$Log->Warn ("** ERROR: didn't specify file from which to exclude addresses\n");
+				$help=1;
+		}
+	}
+}
+
+if ($CLI->Got('T')){
+	for my $val ($CLI->ValuesOf('T')){
+		if ($val =~ /^(\d+[-,]??\d+){1,}$/){
+			$MainScan->ExcludeTCPPorts($val);
+		} else {
+			$Log->Warn ("** ERROR: Invalid TCP port range specification for exclusion: $val\n");
+			$help=2;
+		}
+	}
+}
+
+if ($CLI->Got('u')){
+	for my $val ($CLI->ValuesOf('u')){
+		if ($val =~ /^(\d+[-,]??\d+){1,}$/){
+			$MainScan->IncludeUDPPorts($val);
+		} else {
+			$Log->Warn ("** ERROR: Invalid UDP port range specification for inclusion: $val\n");
+			$help=4;
+		}
+	}
+}
+if ($CLI->Got('U')){
+	for my $val ($CLI->ValuesOf('U')){
+		if ($val =~ /^(\d+[-,]??\d+){1,}$/){
+			$MainScan->ExcludeUDPPorts($val);
+		} else {
+			$Log->Warn ("** ERROR: Invalid UDP port range specification for exclusion: $val\n");
+			$help=8;
+		}
+	}
+}
+
+if ($CLI->Got('A')){
+	$MainScan->NoAIX;
+}
+
+if ($CLI->Got('k')){
+	$MainScan->KidGloves(1);
+}
+
+if ($CLI->Got('c') || ($Config->GetVal("PortScan.TCP.UseConnect") eq "1")){
+	$connect=1;
+	$MainScan->ConnectScan(1);
+}
+
+if ($CLI->Got('X')){
+	for my $val ($CLI->ValuesOf('X')){
+		if (IsIPSpec($val)){
+			$MainScan->ExclAddress($val);
+		} else {
+			$Log->Warn ("** ERROR: Invalid IP address range specification for exclusion: $val\n");
+			$help=16;
+		}
+	}
+}
+
+# Load the IP address ranges into the MainScan object
+for my $IPRange ($CLI->ListParams){
+	if (IsIPSpec($IPRange)){
+		$MainScan->AddAddress($IPRange);
+	} else {
+		if (isInterface($IPRange)){
+			if (!interfaceIP($IPRange)){
+				$Log->Warn ("** ERROR: Unconfigured interface $IPRange\n");
+			} else {
+				my $network=NetAddr::IP->new(interfaceIP($IPRange),interfaceMask($IPRange));
+				$network=$network->cidr;
+				$MainScan->AddAddress($network);
+				$MainScan->localArpScan($IPRange);
+			}
+		} else {
+			$Log->Warn ("** ERROR: Invalid IP address or range specification: $IPRange\n");
+			$help=32;
+		}
+	}
+}
+
+# ...before we load the IP address ranges into the address buffers
+$MainScan->ProcAddresses;
+
+# Check we actually have some targets....
+if (!$help && !$MainScan->TotalTargets){
+	$Log->Warn ("** ERROR: No IP addresses or ranges specified\n");
+	$help=64;			
+}
+
+if ($list){
+	$Log->Log("Listing target IP addresses\n");
+	my $list=1;
+	while ($list){
+		my $i=$MainScan->GetNextAddress;
+		if (!defined($i)){
+			$list=0;
+			last;
+		}
+		next if (!$i);
+		print "$i";
+		my ($locality,$interface)=$MainScan->IsHostLocal($i);
+		print " $interface $locality\n";
+	}
+	__exit (0);
+}
+
+usage() if ($help);
+
+#***************************************************
+
+# Warn if we have a firewall blocking our access
+if (-x "/sbin/iptables"){
+	my $restrictions=1;
+	my @results=`/sbin/iptables -nL`;
+	for my $line (@results){
+		if (index($line,"Chain INPUT ")==0){
+			if (index($line,"policy ACCEPT")>12){
+				$restrictions=0;
+			}
+			last;
+		}
+	}
+	if ($restrictions){
+		print	"    -----------------------------------------------------------------------------------------------------\n";
+		$Log->Warn ("    *** An iptables firewall was detected with a restrictive policy ***");
+		print "    Whilst this is good security practice, it can adversely affect the performance of neet, particularly\n" .
+		      "    when it comes to exploitation; reverse shells cannot be accepted by your machine. It is strongly\n" .
+					"    recommended that your iptables INPUT chain's default policy be changed to ACCEPT.\n" .
+					"    This can be achieved with the command \"/sbin/iptables -P INPUT ACCEPT\"\n" .
+					"    -----------------------------------------------------------------------------------------------------\n";
+		sleep 2;
+	}
+}
+
+#***************************************************
+
+# We need this object even if we aren't running GSMs, simply because it handles
+# a lot of the budgetary control system.
+my $GlobalServiceMonitors=Neet::GlobalServiceMonitor->new($MainScan,$GSMBudget);
+$GlobalServiceMonitors->setUIPID($$);
+
+# Load the GSMs
+if ($rungsms){
+	#$Log->Status (Mid("****** Starting GSMs ******\n"));
+	for my $module ($GlobalServiceMonitors->Modules){
+		$Log->OK ("GSM: Loaded module $module\n","LOGONLY");
+	}
+	for my $module ($GlobalServiceMonitors->FailedModules){
+		$Log->Warn ("GSM: Module $module FAILED to load.\n");
+	}
+}
+
+#***************************************************
+
+$Log->Info (Mid(Stamp()),'PRINTONLY');
+$Log->Info ("-> Using command line: " . $CLI->CommandLine . "\n");
+
+if ($discoverServices){
+
+	my $noBannerGrabPorts=$Config->GetVal("PortRange.Special.NoBannerGrab");
+	$MainScan->NoBannerGrabPorts($noBannerGrabPorts);
+	$Log->Info ("-> CPU Cores: $CPUs\n");
+	$Log->Info ("-> Load Average Target: $SystemLoadTarget\n");
+	$Log->Info ("-> Performance Budget: $GSMBudget\n");
+	$Log->Info ("-> NOT auto-managing the budget\n") if (!$autoManageBudget);
+	$Log->Info ("-> SDM Threads: $MaxServiceDiscoveryThreads\n");
+	$Log->Info ("-> Speed: " . $MainScan->Speed . "\n");
+	$Log->Info ("-> Intensity: " . $MainScan->Intensity . "\n");
+	$Log->Info ("-> Performing service discovery in $numPhases phases\n");
+	$Log->Info ("-> Using ICMP ECHO to discover remote hosts\n") if ($MainScan->PingScan);
+	$Log->Info ("-> Considering hosts as DOWN if they haven't responded after the named range scans\n") if ($limitedPatience);
+	$Log->Info ("-> NOT performing reverse DNS lookups\n") if (!$revDNS);
+	$Log->Info ("-> NOT performing WHOIS lookups\n") if (!$internet);
+
+	for my $address ($MainScan->AddressRanges){
+		$Log->Info ("-> Scanning addresses: $address\n");
+	}
+	for my $file ($MainScan->Files){
+		$Log->Info ("-> Above addresses include addresses from file: $file\n");
+	}
+
+	for my $address ($MainScan->ExcludedAddressRanges){
+		$Log->Info ("-> NOT Scanning addresses: $address\n");
+	}
+
+	for my $file ($MainScan->ExcludeFiles){
+		$Log->Info ("-> NOT Scanning addresses from file: $file\n");
+	}
+	if (!$ScanNamed){
+		$Log->Info ("-> NOT Scanning named port ranges first\n");
+	}
+
+	my $nsr; for my $nr (@NoScanRanges){
+		$nsr .= "$nr ";
+	}
+	print "-> NOT scanning named port ranges: $nsr\n" if ($nsr);
+
+	if ($noBannerGrabPorts){
+		$Log->Info ("-> NOT Bannergrabbing ports $noBannerGrabPorts\n");
+	}
+
+
+	if ($MainScan->AIX){
+		$Log->Info ("-> Avoiding AIX HACMP ports\n");
+	}
+
+	if (!$rungsms){
+		$Log->Warn ("-> NOT running global service monitors (GSMs)\n");
+	}
+	if ($fullTCP){
+		$Log->Info ("-> TCP Ports: " . $MainScan->TCPPorts . "\n");
+	} else {
+		$Log->Warn ("-> TCP scanning named ranges only\n");
+	}
+	if ($fullUDP){
+		$Log->Info ("-> UDP Ports: " . $MainScan->UDPPorts . "\n");
+	} else {
+		$Log->Warn ("-> UDP scanning named ranges only\n");
+	}
+
+} else {
+	$Log->Warn ("-> NOT running service discovery module (SDM)\n");
+}
+for my $os ($MainScan->ExcludedOS){
+	next if (!$os || ($os == ""));
+	$Log->Info ("-> NOT Scanning Operating Systems: $os\n");
+}
+
+if ($MainScan->LimitGsms){
+	$Log->Warn ("-> Running only MANUALLY SPECIFIED GSMs\n");
+}
+if ($MainScan->DisabledGsm){
+	my $msg="-> The following GSMs will be disabled: ";
+	for my $GSM ($MainScan->DisabledGsms){
+		$msg .= "$GSM ";
+	}
+	$Log->Warn ("$msg\n");
+}
+
+if ($autoExploitSafe){
+	$Log->Info ("-> Automatically exploiting safe vulnerabilities\n");
+} else {
+	$Log->Info ("-> NOT automatically exploiting anything\n");
+}
+if ($MainScan->KidGloves){
+	$Log->Warn ("-> Using Kid-Gloves service discovery\n");
+}
+
+$Log->Info ("-> Total of " . $MainScan->TotalTargets  . " targets\n");
+
+$Log->Warn ("-> TCP scanning using full connect() scan\n") if ($connect);
+
+$Log->Info ("-> Will clear old results\n") if ($wantCleanup);
+
+$Log->Info ("-> Bulk ARP scanning local network first.\n") if ($MainScan->localArpScan);
+
+$Log->Warn("\nPress Y to go ahead, or any other key to abort\n",'PRINTONLY');
+
+if (GetKey() !~ /Y/i){
+	$Log->Info ("Aborted by user...\n");
+	__exit (0);
+}
+
+# NOW create the control directory
+if (!$MainScan->CreateControlDirectory){
+	$Log->Error ("Couldn't create the control directory!\n");
+	__exit (1);
+}
+
+# Record the number of targets for the neet shell
+if (open(PC,">${controlDirectory}/totalTargets")){
+  print PC $MainScan->TotalTargets;
+  close PC;
+}
+
+# Record the working directory
+if ( ! -d "$ENV{'HOME'}/.neet"){
+  mkdir "$ENV{'HOME'}/.neet";
+}
+if (open(WD,">$ENV{'HOME'}/.neet/wd")){
+  print WD $ENV{'PWD'};
+  close WD;
+}
+
+$0="Neet UI in $ENV{'PWD'}";
+
+#********************** SCAN START **********************
+$Log->Status (Mid("Scan commencing (" . $CLI->CommandLine . ")\n"));
+
+# Reset status indicators and store session info
+$MainScan->Running;
+$MainScan->StoreCommandLine($CLI->CommandLine);
+
+if ($wantCleanup){
+	# Clean Up
+	# Remove directories
+	$Log->Warn ("Clearing old results\n");
+	system ("rm -rf *.*.*.* __*.*.*.* services/ .osguess.dat " . $MainScan->ControlDirectory . "/sdmscomplete.nt " . $MainScan->ControlDirectory . "/down " . $MainScan->ControlDirectory . "/cancelled " . $MainScan->ControlDirectory . "/interaction");
+	system ("[ -f target*.txt ] && mkdir __neettmp && mv target*.txt __neettmp");
+	system ("rm *.txt");
+	system ("[ -d __neettmp ] && mv __neettmp/* . && rmdir __neettmp");
+}
+
+# Some stuff we need to clean up even if we're resuming.
+unlink $MainScan->ControlDirectory . "/modules";
+
+# Record IP configuration
+$MainScan->System("ifconfig > ifconfig.txt 2>&1");
+
+# Do the WHOIS lookups
+if ($internet && $revDNS){
+	use JR::NetUtils::WHOIS;
+	mkdir "WHOIS";
+	for my $IPRange ($CLI->ListParams){
+		if (IsIPSpec($IPRange)){
+			my $r=$IPRange; $r =~ s/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})[\D+\d+]+/$1/;
+			my $obj=JR::NetUtils::WHOIS->new;
+			if ($obj->lookup($r)){
+				if (open(WH,">WHOIS/${r}.txt")){
+					print WH $obj->data;
+					close WH;
+					$Log->Info ("Displaying WHOIS information\n");
+					$MainScan->System("more WHOIS/${r}.txt");
+					$Log->Warn ("\nPlease confirm that you have permission to test $IPRange.\nPress Y to go ahead, or any other key to abort\n",'PRINTONLY');
+					if (GetKey() !~ /Y/i){
+						$Log->Info ("Aborted by user...\n");
+						__exit (0);
+					}
+				}
+			}
+		}
+	}
+}
+
+#***************************************************
+# Start the neet shell
+my $neetShell=0;
+if (defined($ENV{'DISPLAY'}) && ($Config->GetVal("NeetshTerminalAutoOpen") eq "1")){
+	$Log->Status ("Starting neet shell\n",'LOGONLY');
+	$neetShell=fork();
+	if (!$neetShell){
+		my $cmd=$Config->GetVal("NeetshTerminal");
+		if (!$cmd){
+			$cmd="xterm -geometry 120x30 -T TITLE -e MONITOR";
+		}
+		$cmd =~ s?TITLE?"Neet Shell Window - Results Browser"?g;
+		$cmd =~ s?MONITOR?neetsh?g;
+		exec ("$cmd >/dev/null 2>&1");
+		exit 0;
+	} else {
+		$Log->Info ("Started neet Shell Monitor Window PID $neetShell\n",'LOGONLY');
+	}
+} else {
+		$Log->Info ("Didn't start neet shell monitor - not in X\n",'LOGONLY');
+}
+
+  # Make sure timestamping is on here (if the user selected it)
+  #if ($Config->GetVal("LineTimestamps") == "1"){
+  #	$Log->Linestamp(1);
+  #}
+
+# Test that the DNS is working using dig
+if ($revDNS){
+	$Log->Info(" - testing DNS name resolution\n");
+	my $error=system($MainScan->getPath("dig") . " www.notexistexistexist.com +time=1 >/dev/null 2>&1");
+	$error=$error>>8;
+	if ($error){
+		$Log->Warn(" -- DNS resolution doesn't seem to be working!\n");
+		$revDNS=0;
+	} else {
+		$Log->Info(" -- seems to be working.\n");
+	}
+}
+
+my (@TCPNamedRanges,@TCPPhaseRanges,@UDPNamedRanges,@UDPPhaseRanges,$OSDetect);
+if ($discoverServices){
+	#**********************************************************************************
+	#* ARP scan local interfaces if necessary
+	if ($MainScan->localArpScan){
+		$Log->Status (Mid("****** ARP Scanning local interfaces ******\n"));
+		for my $interface ($MainScan->localArpScan){
+			if (isInterface($interface)){
+				my $arpfile="ARPscan-${interface}.txt";
+				unlink $arpfile;
+				# Find the host addresses available locally at $interface
+				my $network=NetAddr::IP->new(interfaceIP($interface),interfaceMask($interface));
+				my $start=substr($network->first(),0,index($network->first(),"/"));
+				my $last=substr($network->last(),0,index($network->last(),"/"));
+				my $range=$MainScan->toShortRangeNotation($start,$last);
+				#$Log->Status("-------           ->$range\n");
+				my $nmap=$MainScan->getPath("nmap"); my $error;
+				if (!$nmap){
+					$Log->Warn("** ERROR: Couldn't find the path to nmap!\n");
+					__exit (230);
+				}
+				$error=system($MainScan->getPath("nmap") . " -sP -PR -n -e $interface $range >>$arpfile 2>&1");
+				$error=$error>>8;
+				if ($error){
+					$Log->Warn("** ERROR: The ARP scan on $range didn't complete!\n");
+				} else {
+					# Remove the range and add the contents of the ARP scan instead.
+					if (open(ARP,"$arpfile")){
+						$network=$network->cidr;
+						$MainScan->DeleteAddress($network);
+						until (eof ARP){
+							my $host=readline(*ARP);
+							next unless ((index($host,"Host")==0) && (index($host," up")>10));
+							$host =~ s/^Host\s+(\d+\.\d+\.\d+\.\d+)\s[\s\S]+up[\s\S]+/$1/;
+							$MainScan->AddAddress($host);
+						}
+						close ARP;
+					}
+				}
+			}
+		}
+		# Re-initialise the address ranges to accommodate the new ARPscan results, and to remove the original range
+		$MainScan->ProcAddresses;
+
+		# End ARP Scan
+	}
+
+	# Load the OS Detection signatures
+	$OSDetect=new Neet::OSDetect($MainScan->ResourceDirectory . "/osfingerprints.neet");
+	# Register the object with MainScan
+	$MainScan->OSDetect($OSDetect);  
+
+	# Load the SDMIssues so we can identity them as we find them
+	if (open(FH,$MainScan->ResourceDirectory . "/SDMIssues")) {
+		until (eof FH) {
+			my $line = readline(*FH);
+			$MainScan->AddSDMIssue($line);
+		}
+		close FH;
+	} else {
+		$Log->Warn ("--- Couldn't read SDM Issues prompts file ----\n");
+	}
+
+	if ($ScanNamed){
+		# Pre-calculate the ranges so we don't do it every iteration
+		# First, go through the TCP named ranges, so we don't scan those ports again
+		TCPNamedRange: for my $_name ($Config->GetClassKeys("PortRange.Scan.TCP.")){
+			for my $xnr (@NoScanRanges){
+				if ("$_name" eq "$xnr"){
+					next TCPNamedRange;
+				}
+			}
+			my $CurrentRange=$Config->GetVal("PortRange.Scan.TCP." . $_name);
+			# Ensure we don't scan ports that were specifically excluded
+			my $PortSpec=PortRange->new($CurrentRange);
+			for my $ex ($MainScan->ExcludedTCPPorts){
+				$PortSpec->Exclude($ex);
+			}
+			$CurrentRange=$PortSpec->RangeSpec;
+			push @TCPNamedRanges, $CurrentRange;
+		}
+
+	# Now, go through the UDP named ranges, so we don't scan those ports again
+		UDPNamedRange: for my $_name ($Config->GetClassKeys("PortRange.Scan.UDP.")){
+			for my $xnr (@NoScanRanges){
+				if ("$_name" eq "$xnr"){
+					next UDPNamedRange;
+				}
+			}
+			my $CurrentRange=$Config->GetVal("PortRange.Scan.UDP." . $_name);
+			# Ensure we don't scan ports that were specifically excluded
+			my $PortSpec=PortRange->new($CurrentRange);
+			for my $ex ($MainScan->ExcludedUDPPorts){
+				$PortSpec->Exclude($ex);
+			}
+			$CurrentRange=$PortSpec->RangeSpec;
+			push @UDPNamedRanges, $CurrentRange;
+		}
+	}
+
+	# Find out the master TCP port spec, from the command line
+	my $MainTCPRangeSpec=$MainScan->TCPPorts;
+	# Now calculate the part of that spec that each scan phase will cover
+	for (my $_Phase=0; $_Phase<$numPhases; $_Phase++){
+		my $CurrentRange=$MainTCPRangeSpec;
+		my $Range=PortRange->new($MainTCPRangeSpec);
+		$Range->SplitRange($numPhases);
+		my $_PortRange=$Range->RangeSpec($_Phase);
+		$CurrentRange=$_PortRange;
+		# Ensure we don't scan ports that were specifically excluded
+		# or scanned by the named ranges
+		if ($CurrentRange){
+			my $PortSpec=PortRange->new($CurrentRange);
+			for my $ex ($MainScan->ExcludedTCPPorts,@TCPNamedRanges){
+				$PortSpec->Exclude($ex);
+			}
+			$CurrentRange=$PortSpec->RangeSpec;
+			push @TCPPhaseRanges, $CurrentRange;
+		}
+	}
+
+	# Find out the master UDP port spec, from the command line
+	my $MainUDPRangeSpec=$MainScan->UDPPorts;
+	# Now calculate the part of that spec that each scan phase will cover
+	for (my $_Phase=0; $_Phase<$numPhases; $_Phase++){
+		my $CurrentRange=$MainUDPRangeSpec;
+		my $Range=PortRange->new($MainUDPRangeSpec);
+		$Range->SplitRange($numPhases);
+		my $_PortRange=$Range->RangeSpec($_Phase);
+		$CurrentRange=$_PortRange;
+		# Ensure we don't scan ports that were specifically excluded
+		# or scanned by the named ranges
+		if ($CurrentRange){
+			my $PortSpec=PortRange->new($CurrentRange);
+			for my $ex ($MainScan->ExcludedUDPPorts,@UDPNamedRanges){
+				$PortSpec->Exclude($ex);
+			}
+			$CurrentRange=$PortSpec->RangeSpec;
+			push @UDPPhaseRanges, $CurrentRange;
+		}
+	}
+
+	# Start the Service Discovery Thread Scheduler here
+	$Log->Status (Mid("****** Starting Service Discovery ******"));
+
+
+	# --- Set up the budgetary control system ---
+
+	# Initial state. %Threads deals only with the SDM, and NOT GSM threads.
+	my %Threads; $Threads{'Running'}=0; $Threads{'Complete'}=0;
+	my ($targetID,$underLoaded,$overLoaded,$ticks,$scanStage)=(0,0,0,0,"named");
+	$GlobalServiceMonitors->LoadTarget($SystemLoadTarget);
+
+	# $NumSDMThreads can be manipulated by the load control system, and we can keep MaxServiceDiscoveryThreads
+	# as a value to which we can revert.
+	my $NumSDMThreads=$MaxServiceDiscoveryThreads;
+
+	# --> Scheduler <--
+
+	# We want to start a new thread per target IP (up to the maximum allowed by the config file)
+	my $elapsed=0; # To roughly measure running time
+
+	until ($Threads{'Complete'}){
+
+		if ($GotSIGINT){
+			# $GotSIGINT set by signal handler
+			CleanupAndPause();
+		}
+
+		my ($Target, $Interface, $TargetType);
+
+		# Collect spare threads and return their cost to the available budget
+		for my $thread (@{$Threads{'Objects'}}){
+			if ($thread->is_joinable){
+				$thread->join;
+				expungeThread($thread);
+				$Threads{'Running'}--;
+				$GlobalServiceMonitors->RemoveCost($ServiceDiscoveryModuleCost);
+			}
+		}
+
+		# Calculate our capacity to start new SDM threads.
+		$Threads{'Free'}= ( $NumSDMThreads - $Threads{'Running'} );
+
+		# Can we start any new SDM threads?
+		for (my $a=0; $a < $Threads{'Free'}; $a++){
+			$Target=$MainScan->GetNextAddress;
+			if (defined($Target)){
+				next if ("$Target" eq "0");
+				$targetID++;
+				$Interface=$MainScan->Interface;
+				if ($MainScan->TargetLocal){
+					$TargetType="local";
+				} elsif ($MainScan->VPN){
+					$TargetType="vpn";
+				} else {
+					$TargetType="remote";
+					$TargetType="internet" if ($MainScan->Internet);
+				}
+
+				my $DoScan=1;
+				if ($wantToResume && !$wantCleanup){
+					if (!$resumeScanDownHosts && $MainScan->IsHostDown($Target)){
+						$Log->Warn ("SDM - NOT PORT Scanning $Target [$TargetType] - host is DOWN\n") if ($MainScan->Debug);
+						$DoScan=0;
+					}
+					if ($resumeScanOnlyDownHosts && $MainScan->IsHostUp($Target)){
+						$Log->Warn ("SDM - NOT PORT Scanning $Target [$TargetType] - host was UP\n") if ($MainScan->Debug);
+						$DoScan=0;
+					}
+				}
+
+				if ($DoScan){
+					# Limited patience: last chance to thwart the scan if the host still isn't responding after the named ranges
+					# Also, mark the host as UP if we're confident about it
+					if (($TargetType ne "local") && !$MainScan->IsHostDown($Target) && ($scanStage ne "named")){
+						# Check whether we've had a response
+						my ($noTcp,$noUdp,$noIcmp)=(1,1,1);
+						my @ICMP=$MainScan->ReadFile($MainScan->ResultsDirectory . "/$Target/raw/echoRequest.txt");
+						$noTcp = 0 if (-f $MainScan->ResultsDirectory . "/$Target/tcpports.txt");
+						$noUdp = 0 if (-f $MainScan->ResultsDirectory . "/$Target/udpports.txt");
+						for my $icmp (@ICMP){
+							if ($icmp =~ /bytes from/){
+								$noIcmp=0;
+								last;
+							}
+						}
+
+						if ($noTcp && $noUdp && $noIcmp){
+							if ($limitedPatience){
+								$Log->Info ("SDM - Limited patience: no response from $Target yet. It's DEAD to me.\n","LOGONLY");
+								$DoScan=0;
+								$MainScan->SetHostDown($Target);
+								# Leave it to the SDM clean up directories of dead hosts
+							}
+						} else {
+							# Looks like it was definitely up - we got a response
+							$MainScan->SetListItem($MainScan->ResultsDirectory . "/liveHosts.txt",$Target);
+						}
+					}
+				}
+
+				if ($DoScan){
+					$Log->Warn ("SDM - ALLOCATING $Target [$TargetType] $Interface - host is NOT NECESSARILY DOWN\n") if ($MainScan->Debug);
+					$MainScan->SetHostNotDown($Target) if ($scanStage eq "named");
+					$MainScan->SetListItem($MainScan->ResultsDirectory . "/scannedAddresses.txt",$Target) if ($scanStage eq "named");
+
+					# Check the reverse DNS
+					if (($scanStage eq "named") && $revDNS){
+						my $revDNScmd=$MainScan->getPath("dig") . " -x $Target | grep 'ANSWER SECTION' -A1 | grep -v ANSWER | awk {print'\$5'}";
+						my $revDNS=`$revDNScmd`;
+						if ($revDNS && $revDNS =~ /\S/){
+							chomp $revDNS;
+							my $DNS;
+							if (open($DNS,">>DNS.txt")){
+								flock($DNS,LOCK_EX);
+								print $DNS "$Target $revDNS\n";
+								flock($DNS,LOCK_UN);
+								close $DNS;
+							}
+							$MainScan->SetStatValue($MainScan->ResultsDirectory . "/$Target/hostInfo.txt","reversedns","$revDNS");
+						}
+					}
+
+					# Deduct the cost of the SDM from the available budget
+					$GlobalServiceMonitors->AddCost($ServiceDiscoveryModuleCost);
+
+					# And start a new Service Discovery Module thread
+					if ($scanStage eq "named"){
+						my $thread=Neet::threads->create('NamedServiceDiscovery', "$Target:$TargetType:$Interface:$targetID");
+						push @{$Threads{'Objects'}}, $thread;
+						$Threads{'Running'}++;
+					} elsif ($scanStage eq "main"){
+						my $thread=Neet::threads->create('MainServiceDiscovery', "$Target:$TargetType:$Interface:$targetID");
+						push @{$Threads{'Objects'}}, $thread;
+						$Threads{'Running'}++;
+					}
+				}
+			} else {
+				last;
+			}
+		}
+
+		# Determine if there is capacity to scan more SDMs than we are already doing. Don't do this until after the first half-minute though.
+		if (($elapsed > 60) && ($GlobalServiceMonitors->FreeBudget > $ServiceDiscoveryModuleCost)){
+			if ($Target && ($GlobalServiceMonitors->QueueSize==0)){
+				my $increase=int($GlobalServiceMonitors->FreeBudget / $ServiceDiscoveryModuleCost);
+				if (($increase * $ServiceDiscoveryModuleCost) > $GlobalServiceMonitors->FreeBudget){
+					$increase--;
+				}
+				# Let's not go mad either. Can't see us ever doing a decent job with more than say 60 SDMs.
+				if (($NumSDMThreads + $increase) > 60){
+					$NumSDMThreads=60;
+				} else {
+					$NumSDMThreads += $increase;
+				}
+				$Log->Info("Budget Management: Increased Max SDM threads to $NumSDMThreads - spare budget and no queue");
+			}
+
+			# If the SDMs have been increased previously to use up slack and we're out of budget, reduce
+			# the number of SDMs to its proper value.
+		} elsif (($GlobalServiceMonitors->FreeBudget < 0) || ($GlobalServiceMonitors->QueueSize>0)) {
+			if ($NumSDMThreads > $MaxServiceDiscoveryThreads){
+				$NumSDMThreads = $MaxServiceDiscoveryThreads;
+				$Log->Info("Budget Management: Reset SDM threads to $NumSDMThreads");
+			}
+		}
+
+		# Have we finished yet?
+		if ($Threads{'Running'} == 0){
+			$Threads{'Complete'}=1;
+			if ($scanStage eq "named"){
+				# Get ready to go again on the main phases.
+				$Log->Status (Mid("**** Named Service Discovery Scans Complete. Switching to Main Discovery ****\n")) if ($MainScan->Debug);
+				$scanStage = "main";
+				$Threads{'Complete'}=0;
+				$targetID=0;
+				$MainScan->ProcAddresses;
+			} elsif (!$MainScan->isServiceDiscoveryComplete){
+				$Log->Status (Mid("**** Service Discovery Complete ****\n"));
+				# Tell the GSMs that we're done
+				$MainScan->ServiceDiscoveryComplete;
+
+			}
+			if ($rungsms && (!$GlobalServiceMonitors->Idle)){
+				$Threads{'Complete'}=0;	
+			}
+
+
+		} elsif ($startMainScansBeforeNamedScansComplete && ($scanStage eq "named")){
+			# If we're in the "named" stage of the scan and all targets have been assigned then we could start handing
+			# out addresses for full scans right away, as long as we have one or more free threads
+			if ($targetID == $MainScan->TotalTargets){
+				$Log->Status (Mid("**** Named Service Discovery Allocation Complete. Switching to Main Discovery ****\n")) if ($MainScan->Debug);
+				$scanStage = "main";
+				$targetID=0;
+				$MainScan->ProcAddresses;
+			}
+		}
+
+		# Global Service Monitor Scheduling
+		if ($rungsms){
+			$GlobalServiceMonitors->QueueTargets;
+			$GlobalServiceMonitors->ProcessQueue;
+		}
+		$GlobalServiceMonitors->ProcessNeetShellInteractions;
+
+		# Automatic load compensation
+		if ($autoManageBudget){
+			# Now tune the system based on the load average over a minute. Don't bother checking this
+			# during the first minute of running - let the system collect usage data
+			if ($elapsed > 120 && ($ticks == 0)){
+				# Collect some common data
+				my $loadAveragedOver=1; # Minutes
+				my %load=$MainScan->loadAverage;
+				my $systemLoad=($load{$loadAveragedOver}/100);
+				my $loadTarget=$GlobalServiceMonitors->LoadTarget;
+				my $free=$GlobalServiceMonitors->FreeBudget;
+				my $budget=$GlobalServiceMonitors->Budget;
+
+				# Keep track of whether the system is under or over the load average target
+				if ($load{$loadAveragedOver} > $loadTarget){
+					$overLoaded++;
+				} elsif ($load{$loadAveragedOver} < $loadTarget){
+					$underLoaded++;
+				}
+
+				# Deal with underloading first
+				if ($underLoaded >= 3){
+					# How much underloaded are we?
+					my $difference=$loadTarget - $load{$loadAveragedOver};
+					($underLoaded,$overLoaded)=(0,0);
+					# Increase the budget only if there's not much free already. We don't want it increased if the reason
+					# the system is underworked is that there aren't many services to test.
+					if ($free < 20){
+						$budget+=int($difference/2.5);
+						$GlobalServiceMonitors->Budget($budget);
+						$Log->Info("Load Management: System underloaded at $systemLoad ($CPUs CPUs): increasing budget to $budget");
+					} else {
+						$Log->Debug("Load Management: System underloaded at $systemLoad ($CPUs CPUs), but $free budget units are available ") if ($MainScan->Debug);
+					}
+				}
+
+				# Now deal with overloading
+				if ($overLoaded >= 3){
+					# How much ovderloaded are we?
+					my $difference=$load{$loadAveragedOver} - $loadTarget;
+					($underLoaded,$overLoaded)=(0,0); 
+					$budget-=int($difference/2.5);
+					my $cutoff = ($MaxServiceDiscoveryThreads * $ServiceDiscoveryModuleCost);
+					if ($budget > $cutoff){
+						$GlobalServiceMonitors->Budget($budget);
+						$Log->Info("Load Management: System overloaded at $systemLoad ($CPUs CPUs): decreasing budget to $budget");
+						$GlobalServiceMonitors->StartedAnotherThread('reset');
+					} else {
+						$Log->Debug("Load Management: System overloaded at $systemLoad ($CPUs CPUs), but not cutting budget below $cutoff.") if ($MainScan->Debug);
+					}
+				}
+			}
+			$ticks++ if (($elapsed % 2) == 0); # Increment on even cycles - roughly every second.
+			# Trigger the loading checks
+			$ticks=0 if ($ticks>20);
+		}
+		# End Automatic load compensation
+
+		# Have a well-earned rest
+		usleep (500000);
+		$elapsed++;
+	}
+	# End Scheduler
+
+	#***************************************************
+
+	sub expungeThread {
+		my $toDelete=shift();
+		my @threads=@{$Threads{'Objects'}};
+		$#{$Threads{'Objects'}}=-1;
+		for my $thread (@threads){
+			if ($thread != $toDelete){
+				push @{$Threads{'Objects'}}, $thread;
+			}
+		}
+		$#threads=-1;
+	}
+
+} else {
+
+	$Log->Status (Mid("**** Skipped Service Discovery ****\n"));
+	# Tell the GSMs that we're done
+	$MainScan->ServiceDiscoveryComplete;
+}
+
+#***************************************************
+
+$Log->Status (Mid("**** All Scans Complete ****\n"));
+
+__exit(0);
+
+# ********************************************************
+# ********************************************************
+
+sub NamedServiceDiscovery {
+	# This is for TCP and UDP service discovery
+
+	my $TargetData=shift();
+	my $ThreadID=Neet::threads->tid();
+	my ($Target,$TargetType,$Interface,$TargetID)=split ":", $TargetData;
+	$Log->Status ("Thread $ThreadID ($$) starting named range service discovery on: $Target [$TargetType]",'LOGONLY');
+	#$Log->Status ("Thread $ThreadID ($$) starting named range service discovery on: $Target [$TargetType]");
+
+	#***************************
+	# Do the TCP named ranges
+	my $named_index=0;
+	for my $_name ($Config->GetClassKeys("PortRange.Scan.TCP.")){
+		if ($MainScan->IsHostCancelled($Target)){
+			$MainScan->SetHostFinished if (!$fullTCP);
+			if ($MainScan->Debug){
+				$Log->Warn("SDM - Thread $ThreadID (PID $$) Stopped scanning $Target [$TargetType] at TCP Phase $_name - host is CANCELLED\n");
+				return 0;
+			} else {
+				$Log->Warn("SDM - Thread $ThreadID (PID $$) Stopped scanning $Target [$TargetType] at TCP Phase $_name - host is CANCELLED\n",'LOGONLY');
+				return 0;
+			}
+		}
+		my $CurrentRange=$TCPNamedRanges[$named_index];
+		$named_index++;
+		if ($CurrentRange){
+			$MainScan->SetCurrentPortRange($CurrentRange);
+
+			my $PARGS = "tcp:" . $TargetData . ":$CurrentRange:$_name";
+			$0 = "Neet - TCP Service Discovery thread $ThreadID on $Target range $_name";
+			#$Log->Status ("Thread $ThreadID ($$) TCP scanning $Target [$TargetType] ($_name)");
+			my $SDM=Neet::SDM->new($MainScan,$PARGS,$ThreadID);
+			$SDM->ScanHost($_name);
+			$SDM->CleanUp;
+			#$Log->Status ("Thread $ThreadID ($$) FINISHED TCP scanning $Target [$TargetType] ($_name)");
+
+			# Stop scanning if host is down
+			if ((($TargetType eq "local") || ($TargetType eq "vpn")) && ($MainScan->IsHostDown($Target))){
+				$MainScan->SetHostFinished if (!$fullTCP);
+				#$Log->OK("SDM - *** Host DOWN: $Target [$TargetType, $Interface] (TARGET $TargetID OF " . $MainScan->TotalTargets . ") ***\n");
+				if ($MainScan->Debug){
+					$Log->Warn("SDM - Thread $ThreadID (PID $$) NOT Port Scanning $Target [$TargetType] - host is DOWN\n");
+				} else {
+					$Log->Warn("SDM - Thread $ThreadID (PID $$) NOT Port Scanning $Target [$TargetType] - host is DOWN\n",'LOGONLY');
+				}
+				if (-d $Target){
+					$MainScan->System("rm -r $Target");
+				}
+				return 0;
+			}
+		}
+	}
+
+	#***************************
+	# Next, do the UDP named ranges
+	$named_index=0;
+	for my $_name ($Config->GetClassKeys("PortRange.Scan.UDP.")){
+		if ($MainScan->IsHostCancelled($Target)){
+			$MainScan->SetHostFinished if (!$fullUDP);
+			if ($MainScan->Debug){
+				$Log->Warn("SDM - Thread $ThreadID (PID $$) Stopped scanning $Target [$TargetType] at UDP Phase $_name - host is CANCELLED\n");
+				return 0;
+			} else {
+				$Log->Warn("SDM - Thread $ThreadID (PID $$) Stopped scanning $Target [$TargetType] at UDP Phase $_name - host is CANCELLED\n",'LOGONLY');
+				return 0;
+			}
+		}
+		my $CurrentRange=$UDPNamedRanges[$named_index];
+		$named_index++;
+		if ($CurrentRange){
+			$MainScan->SetCurrentPortRange($CurrentRange);
+
+			my $PARGS = "udp:" . $TargetData . ":$CurrentRange:$_name";
+			#$Log->Status ("Thread $ThreadID ($$) UDP scanning $Target [$TargetType] ($_name)");
+
+			$0 = "Neet - UDP Service Discovery thread $ThreadID on $Target range $_name";
+			my $SDM=Neet::SDM->new($MainScan,$PARGS,$ThreadID);
+
+			$SDM->ScanHost($_name);
+			$SDM->CleanUp;
+			#$Log->Status ("Thread $ThreadID ($$) FINISHED UDP scanning $Target [$TargetType] ($_name)");
+
+		}
+	}
+
+	# This is a good point to see whether we can clean up host directories
+	if (!$fullTCP && !$fullUDP){
+		# We're only doing named range scans and we've finished those for this host. Clean up if it wasn't live.
+		if (!$MainScan->TargetLive($Target)){
+			$MainScan->SetHostDown($Target);
+			$MainScan->System("/bin/rm -rf $Target");
+		}
+	}
+
+	$Log->OK("SDM - *** COMPLETED NAMED SERVICE DISCOVERY ON $Target [$TargetType, $Interface] (TARGET $TargetID OF " . $MainScan->TotalTargets . ") ***\n",'LOGONLY');
+
+	return 0;
+}
+
+sub MainServiceDiscovery {
+	# This is for TCP and UDP service discovery
+	my $TargetData=shift();
+	my $ThreadID=Neet::threads->tid();
+	my ($Target,$TargetType,$Interface,$TargetID)=split ":", $TargetData;
+
+	$Log->Status ("Thread $ThreadID ($$) starting main service discovery on: $Target [$TargetType]",'LOGONLY');
+
+	#***************************
+	# Stop scanning if host is down
+	if ($MainScan->IsHostDown($Target)){
+		$MainScan->SetHostFinished;
+		#$Log->OK("SDM - *** Host DOWN: $Target [$TargetType, $Interface] (TARGET $TargetID OF " . $MainScan->TotalTargets . ") ***\n");
+		if ($MainScan->Debug){
+			$Log->Warn("SDM - Thread $ThreadID (PID $$) NOT Port Scanning $Target [$TargetType] - host is DOWN\n");
+		} else {
+			$Log->Warn("SDM - Thread $ThreadID (PID $$) NOT Port Scanning $Target [$TargetType] - host is DOWN\n",'LOGONLY');
+		}
+		if (-d $Target){
+			$MainScan->System("rm -r $Target");
+		}
+		return 0;
+	}
+
+	if ($fullTCP){
+		# Now the TCP Phases
+		for (my $_Phase=0; $_Phase<$numPhases; $_Phase++){
+			if ($MainScan->IsHostCancelled($Target)){
+				$MainScan->SetHostFinished;
+				if ($MainScan->Debug){
+					$Log->Warn("SDM - Thread $ThreadID (PID $$) Stopped scanning $Target [$TargetType] at TCP Phase $_Phase - host is CANCELLED\n");
+					return 0;
+				} else {
+					$Log->Warn("SDM - Thread $ThreadID (PID $$) Stopped scanning $Target [$TargetType] at TCP Phase $_Phase - host is CANCELLED\n",'LOGONLY');
+					return 0;
+				}
+			}
+			my $CurrentRange=$TCPPhaseRanges[$_Phase];
+			if ($CurrentRange){
+				$MainScan->SetCurrentPortRange($CurrentRange);
+
+				my $PARGS = "tcp:" . $TargetData . ":$CurrentRange:$_Phase";
+				$0 = "Neet - TCP Service Discovery thread $ThreadID on $Target phase $_Phase";
+				my $SDM=Neet::SDM->new($MainScan,$PARGS,$ThreadID);
+
+				$SDM->ScanHost($_Phase);
+				$SDM->CleanUp;
+			}
+		}
+	}
+
+	# Finally the UDP Phases
+	if ($fullUDP){
+		for (my $_Phase=0; $_Phase<$numPhases; $_Phase++){
+			if ($MainScan->IsHostCancelled($Target)){
+        		$MainScan->SetHostFinished;
+				if ($MainScan->Debug){
+					$Log->Warn("SDM - Thread $ThreadID (PID $$) Stopped scanning $Target [$TargetType] at UDP Phase $_Phase - host is CANCELLED\n");
+					return 0;
+				} else {
+					$Log->Warn("SDM - Thread $ThreadID (PID $$) Stopped scanning $Target [$TargetType] at UDP Phase $_Phase - host is CANCELLED\n",'LOGONLY');
+					return 0;
+				}
+			}
+			my $CurrentRange=$UDPPhaseRanges[$_Phase];
+			if ($CurrentRange){
+				$MainScan->SetCurrentPortRange($CurrentRange);
+
+				my $PARGS = "udp:" . $TargetData . ":$CurrentRange:$_Phase";
+				$0 = "Neet - UDP Service Discovery thread $ThreadID on $Target phase $_Phase";
+				my $SDM=Neet::SDM->new($MainScan,$PARGS,$ThreadID);
+
+				$SDM->ScanHost($_Phase);
+				$SDM->CleanUp;
+			}
+		}
+	}
+
+  $MainScan->SetHostFinished;
+  my $num=$MainScan->NumHostsFinished;
+
+	# Clean up if the host wasn't live.
+	if (!$MainScan->TargetLive($Target)){
+		$MainScan->SetHostDown($Target);
+		$MainScan->System("/bin/rm -rf $Target");
+	}
+
+  $Log->OK("SDM - *** COMPLETED SERVICE DISCOVERY ON $Target [$TargetType, $Interface] (TARGET $num OF " . $MainScan->TotalTargets . ") ***\n",'LOGONLY');
+	return 0;
+}
+
+#***************************************************
+
+sub CleanupAndPause {
+	$|=1;
+	print "\n";
+	#$Log->Info(" => Stopping running modules...\n");
+	print " => Stopping all running modules.";
+	$MainScan->Pause;
+	my $allDone=0;
+	until ($allDone){
+		for my $thread (Neet::threads::running){
+			my $tid=$thread->tid;
+			next if ($tid==0);
+			if ($thread->is_joinable){
+				print ".";
+				$thread->join;
+			} else {
+				$thread->kill('USR1');
+			}
+		}
+		my $running=0;
+		for my $thread (Neet::threads::running){
+			$running++;
+		}
+		if (!$running){
+			$allDone=1;
+		}
+		usleep 250000;
+	}
+	print "\nDone.\n";
+	__exit(128);
+}
+
+
+#***************************************************
+
+sub __exit {
+	my $code=shift();
+	$Log->Info("neet: Exiting with code $code\n",'LOGONLY');
+	if ($MainScan->Ran && !$MainScan->Paused && !$MainScan->Aborted){
+		$MainScan->Finished;
+	}
+	if (0 && $neetShell){
+		$Log->Info ("Closing neet Shell Window PID $neetShell\n",'LOGONLY');
+		system ("kill $neetShell >/dev/null 2>&1");
+	}
+	sleep 1;
+	$Log->CloseLog;
+	if ($neetXoriginator){
+		system("neetsh");
+		unlink ".neetX";
+		unlink ".neetXlock";
+	}
+	exit $code;
+}
+
+sub usage {
+
+	my $Speed=$MainScan->Speed;
+	my $Intensity=$MainScan->Intensity;
+
+	$Log->Info (qq(
+Usage: neet [options] [<target range> [<target range> <target range>...]]
+
+   Normal usage: neet 192.168.0.1-254
+             or: neet 192.168.0.0/24
+             or interface name are acceptable: neet eth0 wlan0
+             or a single host: neet 192.168.0.10
+             or a file containing a list of targets: neet -f targets.txt
+             or a mixture of all the above: neet 192.168.0.0/24 eth1 192.168.8.16 -f targets.txt 192.168.10.12
+
+   Options:
+
+	-h      Print this help                                                                       [--help]
+
+	[ Target HOST Specification ]
+
+	  Interface names may be given where the whole local subnet is to be scanned. For each
+	  interface specified, the local subnet is ARP scanned before the scan begins - this
+	  saves a lot of time in the host discovery phase, particularly for networks larger than
+	  a class C.
+
+	  -X <ip range>   Exclude this IP address range (may be specified multiple times)             [--exclude-host]
+	  -f <file>       Specify actual targets file (may be specified multiple times)               [--include-hosts]
+	  -F <file>       Specify file containing hosts NOT to test (may be specified multiple times) [--exclude-hosts]
+	  -L              Print the list of targets to STDOUT, then quit.                             [--list-targets]
+	  -O <OS>         Exclude Operating System type (regex) (may be specified multiple times)     [--exclude-os]
+
+	[ Target and Service DISCOVERY ]
+
+	  -c      Use a connect() scan for TCP scans (default is to use a SYN scan)                   [--connect]
+	  -l      Assume non-local hosts are DOWN unless they respond during the named-range scans    [--limited-patience]
+	  -p      Assume hosts are DOWN unless they respond to ICMP ECHO requests                     [--pingscan]
+
+	[ Target PORT Specification ]
+
+	 Default TCP scan range is ports 1-65535, UDP is 1-10000
+	  -A                Avoid AIX HACMP clustering ports                                          [--aix]
+	  -t <port range>   Scan this TCP port range (may be specified multiple times)                [--include-tcp]
+	  -T <port range>   Exclude this TCP port range (may be specified multiple times)             [--exclude-tcp]
+	  -u <port range>   Scan this UDP port range (may be specified multiple times)                [--include-udp]
+	  -U <port range>   Exclude this UDP port range (may be specified multiple times)             [--exclude-udp]
+	  -n <named range>  Do NOT scan this named port range (may be specified multiple times)       [--noscan-range]
+	  -N                Do not scan ANY of the named port ranges                                  [--noscan-named]
+	  -q	   Do NOT perform full UDP scans - just the named ranges	      		      [--min-udp]
+	  -Q	   Do NOT perform full TCP scans - just the named ranges	      		      [--min-tcp]
+
+	[ Performance and Intensity ]
+
+	  -s       Speed   "paranoid", "slow", "normal", "fast", "insane" (default: $Speed)           [--speed]
+	  -i       Intensity "light", "normal", "heavy" (default: $Intensity)                             [--intensity]
+	  -k       Use kid-glove service discovery: do not run nmap -sV or amap		              [--kid-gloves]
+	  -H       Number of host discovery threads (a positive integer - default is $MaxServiceDiscoveryThreads)              [--threads]
+	  -g       Do NOT start the global service monitors (GSMs)                                    [--nogsm]
+	  -d	   Do NOT attempt reverse DNS lookups (even if the DNS is working)		      [--nodns]
+	  -I	   Assume that the hosts are to be accessed across the Internet (adds WHOIS lookups)  [--internet]
+	  -x	   Do NOT automatically exploit vulnerabilities marked as safe                        [--no-auto]		
+	  -m <module>  Block all GSMs except this one (may be specified multiple times)		      [--module]
+	  -M <module>  Disable this GSM (may be specified multiple times)	             	      [--disable-module]
+	  -B <budget>  Set the performance budget to <budget>           	             	      [--budget]
+	  -b	   Do NOT automatically manage the performance budget           	              [--noautobudget]
+	  -o	   Allow main scans to start before the named range scans have finished               [--overlap]
+
+	[ Maintenance ]
+
+	  -z       Update outdated components from the GitHub Neet repositories.                      [--update]
+
+	 
+	See the man page for lots more information.
+),'PRINTONLY');
+	print "\n";
+	$Log->Info ("Showed usage\n",'LOGONLY');
+	__exit ($help);
+
+}
