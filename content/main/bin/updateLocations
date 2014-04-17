@@ -49,6 +49,7 @@ for bin in nmap amap tcptraceroute traceroute hydra wget sslscan dig rpcclient n
 done
 
 OWD="$PWD"
+cd "${NEET}/pkg/bin/"
 for bin in *; do
 	if ! grep ^${bin}= "${CONFDIR}/locations" >/dev/null 2>&1; then
 		echo "${bin}=${NEET}/pkg/bin/$bin" >> "${CONFDIR}/locations"
