@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+
+    <title>Neet: News Feed</title>
+  </head>
+
+  <body>
+
+    <header>
+      <div class="container">
+        <h1>Neet News</h1>
+        <h2>What's the scoop, Betty Boop?</h2>
+
+        <section id="links">
+					<a href="https://jonnyhightower.github.io/neet/" class="btn">Main</a>
+          <a href="https://github.com/JonnyHightower/neet/wiki" class="btn">Wiki</a>
+          <a href="https://github.com/JonnyHightower/neet/issues" class="btn">Bugs and Feature Requests</a>
+          <a href="https://github.com/JonnyHightower/neet/wiki/Neet-User-Guide" class="btn">Neet User Guide</a>
+        </section>
+
+      </div>
+    </header>
+
+    <div class="container">
+      <section id="main_content">
+
+<h2>24th April 2014</h2>
+
+<p>The <a href="https://github.com/JonnyHightower/neet/wiki">Wiki</a> and these GitHub pages came into existence and will be the primary source of news about Neet. The User Guide will be updated, but updates may lag slightly behind the TiddlyWiki version which is contained in the Neet repository. When you're onsite with no Internet access, you can access that Wiki in the /opt/neet/doc/ directory.</p>
+
+
+<h2>17th April 2014</h2>
+<p>The latest release of Neet, <a href="https://github.com/JonnyHightower/neet/releases/tag/1.1.3">1.1.3</a>, incorporates a pretty big change to the overall distribution architecture, which now sees Neet components split into several distinct repositories. This allows users to obtain incremental updates to specific components without necessitating a full download/reinstall cycle for everything in Neet. For example, updates to the Neet Shell can be downloaded and seamlessly installed using only a few Kb of bandwidth, whereas previously this would have required the entire 55Mb+ installer to be manually unpacked and installed, in the process causing any existing Neet installation to be removed.</p>
+
+<p>The new neet-update utility, which can also be called with neet --update, will check the GitHub repositories for new updates to each component bundle. For bundles that have changed, the latest release will be downloaded, extracted and installed without further user interaction.</p>
+
+<p>Although it has been split across several Git repo's, a full install of Neet contains the same components as previous versions, albeit with a slightly revised filesystem layout. Neet's core functionality therefore remains the same, and three of my previously-separate tools have been incorporated into the Neet Shell:</p>
+
+<ul>
+<li>Gethash - retrieve SAM and Cached Hashes from Windows hosts
+<li>Mimikatz - Run Mimikatz on remote hosts
+<li>Hivedump - Retrieve SAM, SYSTEM and SECURITY registry hives, plus NTDS.dit from Domain Controllers.
+</ul>
+
+<p>A major packaging bug was also fixed in this release, where the NASL scripts used for checking Windows and Unix vulnerabilities were somehow omitted from the Git repo. This would have prevented discovery (and therefore exploitation) of some important older vulnerabilities in Windows and Solaris platforms. I apologise if this has impacted any of your testing.</p>
+      </section>
+    </div>
+
+  </body>
+</html>
