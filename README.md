@@ -10,9 +10,9 @@ It's not magic, but it does what it says on the tin: network enumeration and exp
 
 There's also a customised shell which takes a lot of the common tasks you'd normally perform and rolls them into simple tasks. For example, the win command lists the Windows hosts on the network, and cross-references them against issues and vulnerabilities found to give you a colour-coded list of live hosts.
 
-And there's documentation too! Check out the man pages, the help command inside the neet shell, and the HTML Wiki document in /opt/neet/doc.
+And there's documentation too! Check out the man pages, the help command inside the neet shell, and the HTML Wiki document in /opt/neet/doc. Also, please check out [the wiki](https://github.com/JonnyHightower/neet/wiki) for the latest news and issue tracking/feature requests.
 
-NEW in 1.10: Online incremental updates mean that you can get the latest version without reinstalling. Only the updated components will be downloaded and installed.
+NEW in 1.1.3: Online incremental updates mean that you can get the latest version without reinstalling. Only the updated components will be downloaded and installed.
 
 IN OTHER WORDS...
 
