@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+
+    <title>Neet User Guide: Terminology</title>
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <h1>Neet User Guide</h1>
+        <h2>Terminology used in this documentation</h2>
+
+        <section id="links">
+          <a href="guide.html" class="btn">Neet User Guide</a>
+					<a href="index.html" class="btn">Back to main project page</a>
+          <a href="https://github.com/JonnyHightower/neet/issues" class="btn">Bugs and Feature Requests</a>
+        </section>
+
+      </div>
+    </header>
+
+    <div class="container">
+      <section id="main_content">
+
+<h2>Neet Shell</h2>
+
+<p>The neet shell is a set of bash aliases which provides a rich set of features for making the most of the results produced by neet. If you are running X windows, a new terminal containing an instance of the neet shell will automatically open when you begin a scan. Apart from that, you can start an instance of a neet shell anytime, by running the neetsh command. The new shell will automatically start in the most recent (or current) results directory, saving you having to navigate there first. The neet shell has a help command, which displays a list of the available commands, together with a brief description of each.</p>
+
+<p>If you wish to have a detailed log of everything that is done inside the neet shell, starting neetsh with the -s or –screen options will start it in a screen session, logging to a file.</p>
+
+<h2>Locality</h2>
+<p><b>local</b> | <b>remote</b> | <b>internet</b> | <b>vpn</b></p>
+
+<p>Neet automatically classifies hosts as local, remote or accessed via VPN by examining the kernel's routing table. Additionally, you can specify on the command line if remote hosts should be assumed to be accessed over the Internet. The identified location of the hosts affects the method used for host discovery and also the speed and intensity mappings (see speed and intensity below). VPN links are identified by the naming of the interface through which the affected hosts are accessed. By default, hosts accessed by tapX or tunX interfaces are assumed to be on a VPN link (these names can be changed or added to in the configuration file via the Interface.VPN parameter).</p>
+
+<h2>Host Discovery</h2>
+
+<p>Local hosts are discovered by ARP, whilst remote hosts are assumed to be UP for the whole test unless the SDM is told (with the -p flag) to use ICMP ECHO to identify live hosts. You can alternatively use the -l option to treat hosts as DOWN if they haven't responded during the named ranges scans.</p>
+
+<p>Internet hosts are treated the same as remote hosts, except for having their own set of performance mappings in the configuration file. VPN hosts which are on the same subnet as a local VPN interface will be discovered by ARP; those not on the same subnet as a local interface will be treated as remote hosts with VPN performance settings. The ICMP ECHO discovery and Limited Patience methods apply to remote, Internet and VPN hosts, but not to local hosts (ie connected directly to local interfaces). Host discovery is discussed in more detail in the Host Discovery section.</p>
+
+<h2>Internet Mode</h2>
+
+<p>Neet cannot automatically determine if remote hosts are remote on a large corporate network, or actually located across the Internet. When -I is specified on the command line, neet assumes that all remote hosts are actually Internet-based, and alters the performance of the scan accordingly.</p>
+
+<p>As well as this scan tuning change, the user is prompted to confirm WHOIS lookups on the target address ranges before the scan commences.</p>
+
+<h2>Scan Phases</h2>
+
+<p>The Service Discovery Module splits the main port scan into a number of chunks or Phases - 10 by default - for example, 1-6554,6555-13109 and so on.</p>
+
+<p>After scanning each block of ports, the SDM identifies and records any services which are listening on those ports before moving on to the next phase. Splitting the scan like this brings a number of benefits. Firstly, it allows any services residing in the lower ranges to be discovered much more quickly than if service identification waited for the full range to be scanned. Secondly, if a scan is paused, it can be resumed from the phase it was previously scanning, instead of beginning the whole range all over again.</p>
+
+<h2>Named Range Scans</h2>
+
+<p>Where the full range of 65535 ports is to be scanned, sometimes it can take some time for even the first phase to complete, and this time is not very productive for the pentester. Named ranges are limited ranges of ports which are scanned and analysed by the SDM before the first main phase begins. Named ranges are specified in the configuration file, and are named PortRange.Scan.TCP.NAME or PortRange.Scan.UDP.NAME, where NAME is an identifier for that port range. The named ranges are scanned in the order in which they appear in the configuration file. For example, the Windows named range is specified as "PortRange.Scan.TCP.Windows=111,135,139,445" in the configuration file, and is the very first range to be scanned and analysed by neet, providing very fast identification of Windows from non-Windows hosts. You are free to add your own named ranges, or to modify the default ones to quickly identify key services. Ports which are scanned as part of a named range are automatically excluded from later scans of the same protocol, so services will not go through the identification process twice.</p>
+
+<h2>SDM - Service Discovery Module.</h2>
+
+<p>There is only one SDM, and it is responsible for discovering hosts and identifying services. It is multi-threaded, and so can test multiple IP addresses at once. When you specify a number of threads on the command line (or in the configuration file), it is the number of SDM threads that you are specifying. The SDM simply discovers services and writes them to files in the services directory. It can also note issues which can be spotted from the process of identifying services - support for SSH protocol 1 for instance. It does not do any testing of the services.</p>
+
+<h2>GSM - Global Service Monitors</h2>
+
+<p>GSMs are what make neet extensible - each is a module which performs a specific check. For example, the SMTP Global Service Monitor is only interested in checking SMTP servers, and knows how to do nothing else. These modules are also multi-threaded and can check more than one instance of a service at once. The term Global refers to the fact that the module is interested in all instances of the service which it is monitoring, regardless of where they are in terms of host, protocol and port.</p>
+
+<h2>Scan Intensity</h2>
+
+<p>The specified scan intensity is an indication of how aggressively the SDM should probe services in its attempts to identify them. The setting maps to a variety of intensity settings which apply mostly to the amap and nmap tools. The mappings are all contained in the configuration file, and can be changed depending on your experiences. The default settings have been tried and found suitable in the environments in which neet has been tested to date, but they may not suit all use cases. The individual intensity mappings for a given nominal setting (eg light) will vary depending on the relative location of the host - local, remote etc.</p>
+
+<h2>Scan Speed</h2>
+
+<p>The specified scan speed is an indication of how rapidly the scan should progress, and maps to a variety of speed, timeout and retry settings which apply to a large number of the tools used by neet. The mappings are all contained in the configuration file, and can be changed depending on your experiences. The default settings have been tried and found suitable in the environments in which neet has been tested to date, but they may not suit all use cases. The individual speed mappings for a given nominal setting (eg fast) will vary depending on the relative location of the host - local, remote etc.</p>
+
+      </section>
+    </div>
+
+  </body>
+</html>
