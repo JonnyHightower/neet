@@ -41,14 +41,23 @@ else
 	. "${NEET}/core/installsupport"
 fi
 
-#https://github.com/JonnyHightower/neet/archive/1.0.2.tar.gz
-
 BASEURI="https://github.com/JonnyHightower/REPO/archive/VERSION.tar.gz"
 REPOS="neet neet-deps neet-bundled neet-shell neet-upload neet-resources neet-modules"
-owd="$PWD"
+
+# The --local argument prevents neet-update accessing the Internet to check for updates.
+# In this case, neet-update only checks for repos that have already been packaged into
+# the staging area.
+LOCALONLY=0
+for arg in $1 $2 $3 $4; do
+	if [ "$arg" == "--local" ]; then
+		echo "Checking local repos only"
+		LOCALONLY=1
+		break
+	fi
+done
+
 # The basic gist is to check each repo to see if it contains a newer version than
 # the locally-installed version.
-
 echo " + Checking for updated neet components..."
 for repo in $REPOS; do
 	localOnly=0
@@ -58,10 +67,13 @@ for repo in $REPOS; do
 	installed=`getVersion $repo`
 
 	# For local testing
-	if [ -f "stage-$repo" ]; then
+	if [ $LOCALONLY -eq 1 ] || [ -f "stage-$repo" ]; then
 		localOnly=1
+	fi
+	if [ -f "stage-$repo" ]; then
 		remote=`cat "stage-$repo"`
-	else
+	fi
+	if [ $localOnly -eq 0 ]; then
 		remote=`${NEET}/core/githubVersion $repo $installed`
 		if [ -z $remote ]; then
 			if [ "$installed" != "0.0.0" ]; then
@@ -118,6 +130,5 @@ for repo in $REPOS; do
 	else
 		echo "   - Could not find this component. Not updating."
 	fi
-
 done
 
