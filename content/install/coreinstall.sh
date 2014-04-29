@@ -64,7 +64,7 @@ for bin in neet neet-update; do
 done
 
 # Somewhere for the documentation to go
-cp ../doc/*.html ${NEET}/doc/
+cp -R ../doc/* ${NEET}/doc/
 
 # Now the man pages
 MANIN=0

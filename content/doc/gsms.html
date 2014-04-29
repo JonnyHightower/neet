@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+
+    <title>Neet User Guide: Global Service Monitors</title>
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <h1>Neet User Guide</h1>
+        <h2>The Global Service Monitors (GSMs)</h2>
+
+        <section id="links">
+          <a href="guide.html" class="btn">Neet User Guide</a>
+					<a href="index.html" class="btn">Back to main project page</a>
+          <a href="https://github.com/JonnyHightower/neet/issues" class="btn">Bugs and Feature Requests</a>
+        </section>
+
+      </div>
+    </header>
+
+    <div class="container">
+      <section id="main_content">
+
+<p>The Global Service Monitors are the modules which test each service as it is recorded (provided there is enough spare budget; if there isn't then the service is queued). They are Perl modules and loaded into memory when neet starts by the GlobalServiceMonitor.pm core neet module. They are run in a <i>strict</i> environment, and any modules which fail to parse properly are not loaded; the failure is logged, although neet will function as normal without the broken module. Obviously whichever functionality the module was meant to provide will be missing from the scans.</p>
+
+<p>The simplest way to add a new module is to change into the <i>/opt/neet/modules/</i> directory and copy the <i>Template.gsm.temp</i> file, renaming it to reflect the function of the module. The Global Service Monitor handler module will attempt to load any file in this directory that has the .gsm extension, which is the reason for the template module having a .temp extension.</p>
+
+<p>The template module is well commented, and it should be fairly simply to configure the options near the top of the script. There are a few rules which must be followed:</p>
+<ul>
+<li>The package name MUST be set to match the file name of the module, excluding the .gsm extension. See the other modules for reference. If there is a mismatch, the module handler will not know the namespace of the module, and will not be able to instantiate it. In the worst case, it could cause one module's testing function to be run against completely inappropriate services.
+<li>The new() function contains the configuration options. The <i>Enabled</i> parameter must be set to 1 or the module will not be used.
+<li>The WatchFiles array element must contain at least one file containing a list of services to watch. As each new service appears in the watched file, the module handler dispatches another instance of the module to examine it.
+</ul>
+
+<p>The template module contains all of the code necessary for the module to function properly within neet, including the advanced functionality such as pause/resume, multi-threading, budget control and queueing etc. All that needs to be added is the test-specific code, which should be inserted into the activate() function, where the CODE GOES HERE banner is found.</p>
+
+<p>There is an API reference in the comments of that section, so you will know what information is already available to your module and how to record vulnerabilities and other messages, and log in a standard way that does not cause havoc with file locks.</p>
+
+      </section>
+    </div>
+
+  </body>
+</html>

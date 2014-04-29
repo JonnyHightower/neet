@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+
+    <title>Neet User Guide: Host Discovery</title>
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <h1>Neet User Guide</h1>
+        <h2>How Neet discovers hosts</h2>
+
+        <section id="links">
+          <a href="guide.html" class="btn">Neet User Guide</a>
+					<a href="index.html" class="btn">Back to main project page</a>
+          <a href="https://github.com/JonnyHightower/neet/issues" class="btn">Bugs and Feature Requests</a>
+        </section>
+
+      </div>
+    </header>
+
+    <div class="container">
+      <section id="main_content">
+
+<p>The discovery method for target hosts is dependent on each host's proximity to the scanning host. Neet begins with two broad-brushed types of host: local and remote. Remote hosts are further classed as internet, if the -I (–internet) option was passed on the command line, or vpn, if they are accessed via an interface type listed in the <i>Internet.VPN</i> parameter in the config file.</p>
+
+<h2>Local Discovery</h2>
+
+<p>Neet uses ARP for discovery of targets which lie within the address ranges of a local interface, and classes them as local hosts. Where network ranges are specified as addresses, each target is discovered individually, immediately prior to port-scanning. Where network interfaces are specified, the entire network ranges for the interfaces are ARP-scanned, and the respondents deemed to be the targets.</p>
+
+<p>For addresses, or ranges of addresses, neet calculates the locality of each target on an individual basis at scan time. It is conceivable that there could be a mix of local and non-local hosts in the same scan.</p>
+
+<h2>Remote Discovery</h2>
+
+<p>Hosts that are remote are those which are accessed through a gateway. The reliability of ARP as a detection mechanism is not available and therefore hosts are assumed as being UP all the way through the scans. This can mean scans take a long time: if a large address space is being scanned and there are not many live hosts present, a lot of time will be taken up scanning empty address space, using time and SDM threads that would be more usefully deployed on live hosts. However, from a thorough discovery point of view, the full scans must be completed on each host to provide maximum assurance that there isn't a host listening on just one obscure high-end port.</p>
+
+<p>The -p (–pingscan) option can be used to accelerate host discovery in such situations: hosts will only be considered live if they respond to an ICMP Echo request or a TCP connection attempt to TCP/80. If there is no response to either probe, the host will be considered down and no more scanning of that address will take place.</p>
+
+<p>The difficulty is that it is common for hosts to be firewalled off, and it should be confirmed with the network administrators whether hosts are likely to respond to such ping requests or not. If some hosts are deployed with host-based firewalls, this scan is likely to miss those hosts.</p>
+
+<p>An alternative option in such circumstances is a recent addition to neet: the –limited-patience (-l) option. This applies only to non-local hosts - those which cannot be discovered using ARP. Limited Patience is a mode in which Neet assumes that all hosts are up for the duration of the named ranges scans. However, hosts which haven't responded to either TCP, UDP or ICMP by the end of the named range scans, are considered to be down, and are ignored from that point on. This frees up SDM threads to move on to scan the next addresses in the target range, and ultimately means that progress through the network address space is far quicker.</p>
+
+<p>Bear in mind that with this convenience there is an implicit risk that hosts which expose only services that are outside the ports in the named ranges will be incorrectly classified as dead, and the live services overlooked. The operator should make a judgement call as to whether this is an acceptable risk based on discussions with the local network team, the scope of work and the available time.</p>
+
+<p>VPN and Internet hosts are discovered in the same way as remote hosts. The only difference in their treatment is the differing speed and intensity profiles selected depending on their location. These profiles are all contained within the configuration file <i>/opt/neet/etc/neet.conf</i>.</p>
+
+      </section>
+    </div>
+
+  </body>
+</html>
