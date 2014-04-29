@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+
+    <title>Neet User Guide: Service Identification</title>
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <h1>Neet User Guide</h1>
+        <h2>How Neet finds and identifies network services</h2>
+
+        <section id="links">
+          <a href="guide.html" class="btn">Neet User Guide</a>
+					<a href="index.html" class="btn">Back to main project page</a>
+          <a href="https://github.com/JonnyHightower/neet/issues" class="btn">Bugs and Feature Requests</a>
+        </section>
+
+      </div>
+    </header>
+
+    <div class="container">
+      <section id="main_content">
+
+<h2>Service Discovery</h2>
+
+<p>In the most basic terms, Neet's purpose is to find and identify network services, which in turn implies the discovery of network hosts. Host and service discovery methods vary, but are usually automatically selected based on the target's location in relation to the scanning host according to the local routing table.</p>
+
+<p>Neet's default mode of operation is to launch dedicated modules (Global Service Monitors) to investigate and test network services as they are identified. However, if neet is run with the -g (–nogsm) option, no service testing will take place, and neet will perform only discovery tasks.</p>
+
+<p>Whether or not you are using the Global Service Monitors, it is important to understand how these discovery scans are arranged in order to optimise scans in which you might have limited time or resources, and to have some chance of gauging the progress of your scan.</p>
+
+<h2>Scanning Model</h2>
+
+<p>Host and Service discovery is implemented in the Service Discovery Module (SDM). One SDM thread is started per target address, and each thread iteratively scans TCP and UDP port ranges for that host until it is complete. The thread then finishes and another is spawned in its place, scanning a different host. By default, fifteen of these SDM threads are started simultaneously, scanning fifteen hosts in tandem, though correspondingly fewer SDM threads will be started if there are fewer than fifteen target hosts. The number of SDM threads can be changed per-scan on the command line or more permanently in the configuration file.</p>
+
+<p>Per host, the scanning model is easy to understand, and is based on a batched-scan principle, whereby the full range of ports to be scanned is split into a number of chunks or batches. By default the number of batches is ten, although this can be changed in the configuration file or on the command line.</p>
+
+<p>Immediately after each batch has been scanned, any open ports are probed in an attempted to identify the listening service. Once all the services in the current batch have been identified or classified as unidentified the SDM moves on to scan the next batch of ports.</p>
+
+<p>When all service identification has been completed on all batches, service discovery on the host is considered to be complete. Obviously this does not mean that Neet is finished - there may well be other hosts on which service discovery is still running, and it is likely that there are still Global Service Monitors (GSM) running scans on services found throughout the network.</p>
+
+<h2>Named Ranges</h2>
+
+<p>On a full-range port scan (1-65535), each batch of ~6554 ports can still take a considerable time to scan, meaning that it can be quite a while before the penetration tester has any results to work with. To combat this situation, the concept of named ranges was introduced. These are simply port ranges which have each been given a name specified in the configuration file. All named port ranges specified in the configuration file will be scanned before Neet moves on to scan the main phase of scans. You can add your own additional ranges, modify the existing ones, or comment them out entirely although this is strongly discouraged as you would lose a number of the advantages of Neet.</p>
+
+<p>Neet ships with three named ranges pre-configured: two for TCP port ranges and one UDP range. The TCP ranges are named "Windows", which covers just four ports, and "Common", which includes around 25 ports. The UDP named range is called "Common" and includes a similar number of UDP ports on which services are commonly found.</p>
+
+<p>In practice, this means that Neet will initially scan TCP ports 111,135,139 and 445, performing service identification on them before moving on to the Common range of TCP ports and then the Common range of UDP ports. This allows a somewhat crude and reasonably accurate but quick distinction between Windows and Unix hosts on the network. Scanning the Common ports next will likely identify the majority of services on the network within a much quicker time than if the ports were scanned in the traditional manner.</p>
+
+<p>By default, Neet waits until the named range scans have been completed on all hosts before moving on to the main phase of ten batches. The purpose of this behaviour is to allocate all available SDM threads to discovery of common services throughout the whole network. If, in contrast, each host SDM thread moved from the named range to the main scan phase, the service discovery operation would progress very slowly through the network, yielding a small number of results and reducing the effectiveness of the named range design.</p>
+
+<p>In cases where some hosts are very slow to respond, it can be the case that the named ranges phase is still running on one or two hosts, whilst it has finished on all the others. In such cases, time is being wasted since no new services are being discovered elsewhere on the network. This can be overcome using the -o (–overlap) option, which allows the main scans to start once all the hosts have had the named ranges started, even if some of them haven't finished.</p>
+
+<p>Splitting service discovery into two main phases (named and main) means that we can stop the scans after the named ranges, saving time but still benefiting from targeted interesting service discovery. This is a good method of gaining a quick view of what devices are on the network. The -q (–min-udp) and -Q (–min-tcp) options can be used to limit TCP or UDP scans to only the named ranges.</p>
+
+<h2>Service Identification</h2>
+
+<p>At the end of each batch of port scans, the Service Discovery Module (SDM) carries out service identification against the open ports. For a given host, the same SDM thread is used for this, and therefore the process of portscan, identify, portscan, identify etc... is a linear one.</p>
+
+<p>In terms of service identification, the first port of call (pun intended) is the RPC portmapper, TCP/111, which if it's open is queried during the first of the named ranges scans. Any services reported as being running by the portmapper are logged as the portmapper had identified them. All ports, TCP and UDP, which the portmapper says are open are recorded as such, and they are excluded from future portscans.</p>
+
+<p>Following the RPC Portmapper analysis, any open ports which remain unidentified are tested sequentially to see what service may be listening on each. The following process is followed for each open port in each scanned batch.</p>
+
+<p>Initially, the sbg tool is used to connect to the port and grab a banner, if possible. Any data returned is compared to a plain-text list of service signatures (/opt/neet/resources/sigs.txt) in an attempt to determine the service type. The sigs.txt file is formatted such that a slice from each banner can be recorded along with the service's entry in the service file. This makes it easy for HTTP services, for example, to be shown with their respective Server: headers.</p>
+
+<p>Should the service remain unidentified, nmap is used to attempt more probes. The intensity with which the probing is carried out is dictated by the scan configuration. It should be noted that the kid-gloves scanning option will prevent this detection method from being used.</p>
+
+<p>If nmap identifies the service with a reasonable level of confidence, the service is deemed to have been identified. However, a low vote of confidence means that the identification is held temporarily whilst another detection method is tried.</p>
+
+<p>The final identification method is THC's amap, although this is also skipped if kid-gloves is specified. Amap is known to be susceptible to some false-positives, and the SDM checks for these. If a false-positive is suspected, or if Amap fails altogether to identify the service, the nmap identification is used instead.</p>
+
+<p>In situations where no method managed to identify the service, it is recorded as unidentified and is listed in unconfirmedtCPPorts.txt or unconfirmeduDPPorts.txt.</p>
+
+<p>Where the service has been identified, its name is cross-checked with the /opt/neet/resources/servicenames.neet file, which allows services to be considered as having a different name by neet. For example, microsoft-rdp, ms-term-serv and ms-wbt-server are all translated to terminalservices so that the output is consistent.</p>
+
+<p>Once any necessary translation is done, the service is listed in confirmedtCPPorts.txt or confirmeduDPPorts.txt together with the method used to identify the service. The service is also listed in the appropriate file in the services directory.</p>
+
+<p>Finally, the service identification is used by the OS detection module to help determine the operating system of the remote host. Output from the detection mechanism is compared with the /opt/neet/resources/osfingerprints.neet file in order to try to determine a match. OS fingerprinting in neet is described in the OS Fingerprinting section.</p>
+
+
+
+
+      </section>
+    </div>
+
+  </body>
+</html>

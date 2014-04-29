@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+
+    <title>Neet User Guide: Performance</title>
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <h1>Neet User Guide</h1>
+        <h2>Tweaking the performance of your scans</h2>
+
+        <section id="links">
+          <a href="guide.html" class="btn">Neet User Guide</a>
+					<a href="index.html" class="btn">Back to main project page</a>
+          <a href="https://github.com/JonnyHightower/neet/issues" class="btn">Bugs and Feature Requests</a>
+        </section>
+
+      </div>
+    </header>
+
+    <div class="container">
+      <section id="main_content">
+
+<p>Without some kind of resource limits, neet would consume all available resources to complete the scans as quickly as possible. In practice, this would result in the scanning host becoming unresponsive, especially if other resource-intensive applications - such as Virtual Machines - were running on the same host. To combat this, neet uses a cost/budget system to prevent new scans starting when the available resources have been assigned.</p>
+
+<p>When neet starts, it has a default budget figure which has been set in the configuration file or on the command line. Each scan thread has a notional cost assigned to it: each Service Discovery Module thread for example has a cost of 10, whilst each Global Service Monitor module has a cost assigned which relates to the resources it consumes - the more resource intensive, the higher the cost. The GSM costs are allocated by the module authors and are coded into the modules.</p>
+
+<p>When neet starts any scan, its cost is deducted from the available budget, and returned to the budget when the scan finishes. If the scheduler wants to start a scan but the budget has been used, the scan is queued until budget becomes available again. The budget can be manually adjusted during the scan from the neet shell, to compensate for under- or over-loading of the scanning host. Increasing the budget will immediately allow some of the queued scans to be started, up to the new budget figure. Decreasing the budget will prevent new scans starting until enough existing scans have finished to release some budget again.</p>
+
+<p>However, the budget is automatically trimmed, both upwards and downwards, based the system's load average. If the system is underloaded, the budget is gradually increased to allow more scans to run simultaneously, using up spare capacity. Conversely, if the system is overloaded, the budget is reduced. This will prevent new scans from starting until existing scans have finished and the scanning cost meets the new budget. In this way, the load on the system is reduced. This automatic trimming of the budget can be disabled on the command line prior to starting a scan.</p>
+
+<h2>In-Scan Tuning</h2>
+
+TO BE COMPLETED
+
+      </section>
+    </div>
+
+  </body>
+</html>

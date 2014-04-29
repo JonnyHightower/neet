@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+
+    <title>Neet User Guide: Getting started</title>
+  </head>
+  <body>
+    <header>
+      <div class="container">
+        <h1>Neet User Guide</h1>
+        <h2>Getting started</h2>
+
+        <section id="links">
+          <a href="guide.html" class="btn">Neet User Guide</a>
+					<a href="index.html" class="btn">Back to main project page</a>
+          <a href="https://github.com/JonnyHightower/neet/issues" class="btn">Bugs and Feature Requests</a>
+        </section>
+
+      </div>
+    </header>
+
+    <div class="container">
+      <section id="main_content">
+
+<h2>Internal Network Scans</h2>
+
+<p>The most common type of scan you will run with neet is simply 'neet range' , where range is some IP address range on an internal network somewhere.</p>
+
+<pre>neet 10.24.25.129/25</pre>
+
+<p>This will set up a scan which incorporates all modules and functionality. The user will be shown the test parameters, and asked to accept them before the scan commences. Once the scan is running, neet will show an overview of the test progression, highlighting issues and vulnerabilities found. You can interact with the results in a regular system shell, but the easiest way is to use the neet shell (see Neet Terminology), which has a lot of useful functionality.</p>
+
+<p>Scanning ranges can be specified in a number of formats. For example, the above range could alternatively be expressed as 10.24.25.129-254, excluding network and broadcast addresses (these special addresses will be automatically excluded from scan ranges which have been specified using CIDR notation).</p>
+
+<p>Ranges may be specified within any IPv4 octet. For example, 10.24.25-28.129-254.</p>
+
+<p>If you want to scan the entire subnet to which your machine is connected, the quickest method is usually to specify the relevant network interface(s). For example, to scan everything connected to eth0, just use neet eth0. Specifying a network interface to scan from causes neet to perform a network-wide ARP scan of the address range in which the interface is configured, and then target only the hosts which provided an ARP response. All other address specification types cause neet to perform appropriate host discovery on a per-address basis.</p>
+
+<p>Neet will happily scan from multiple interfaces simultaneously, choosing the best interface for each target based on the host's routing table. It is perfectly valid to express multiple target ranges in mixed formats. In the following example there are three separate address ranges being scanned in the same scan run:</p>
+
+<pre>neet wlan0 192.168.1-10.1-254 eth1</pre>
+
+<p>To view all the available command-line options, run neet in a fresh directory with no options, or with the -h (–help) option. Alternatively, see the neet man page or the Scanning Options section.</p>
+
+<h2>Scanning Internet Hosts</h2>
+
+<p>Neet usage in these cases is very similar to non-Internet scans, except that the -I (–internet) flag should be specified on the command line to indicate Internet mode (see Neet Terminology). The user will be shown WHOIS records of the target address range(s), and asked to confirm that they have permission to test the targets before the test will start.</p>
+
+<p>In Internet mode, or when scanning any group of non-local hosts you may wish to tune the criteria used to determine when a host is considered dead or alive, as non-local hosts are likely to be filtered and cannot be reached via ARP. This is discussed in the Host Discovery section.</p>
+
+      </section>
+    </div>
+
+  </body>
+</html>
