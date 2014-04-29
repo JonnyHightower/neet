@@ -644,6 +644,10 @@ usage() if ($help);
 # Warn if we have a firewall blocking our access
 if (-x "/sbin/iptables"){
 	my $restrictions=1;
+
+	if ($Config->GetVal("Warnings.Firewall") && ($Config->GetVal("Warnings.Firewall") =~ /off/i)){
+		$restrictions=0;
+	}
 	my @results=`/sbin/iptables -nL`;
 	for my $line (@results){
 		if (index($line,"Chain INPUT ")==0){
