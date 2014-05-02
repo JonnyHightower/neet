@@ -21,6 +21,11 @@
 ##########################################################################
 
 package Neet::GlobalServiceMonitor;
+# Ensure we can find our Perl modules
+BEGIN {
+	unshift @INC, "/opt/neet/core";
+}
+
 use File::Find;
 use Neet::threads;
 

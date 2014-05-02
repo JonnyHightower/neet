@@ -66,12 +66,14 @@ sub new {
 	my %ConnectorParam=@ConnectorArgs;
 	my %Shell;
 
+	my $iShell=\%Shell;
+	bless $iShell, $PKG;
+
 	if (defined($ShellParam{'Verbose'})){
 		$Shell{'Verbose'}=$ShellParam{'Verbose'};
 	} else {
 		$Shell{'Verbose'}=1;
 	}
-
 	my $ConnectorType=$ShellParam{'Connector'};
 	my $ConnectorName="JR::iShell::Connector" . $ConnectorType;
 	# Try and load the connector
@@ -90,10 +92,71 @@ sub new {
 	#print "$ConnectorType connector loaded OK\n" if ($Shell{'Verbose'});
 
 	my $Connector=$ConnectorName->new(@ConnectorArgs);
+	$Shell{'ConnectorObject'}=$Connector;
 	if (!$Connector){
 		#print "Couldn't connect with this connector\n" if ($Shell{'Verbose'});
 		return undef;
 	}
+
+	if ($ShellParam{'EnableXpcmdshell'} && ($ShellParam{'EnableXpcmdshell'} == 1)){
+		print "Trying to enable XP_CMDSHELL\n";
+		my $overallSuccess=1;
+		for my $query (
+
+			"EXEC sp_configure 'show advanced options', 1",
+			"RECONFIGURE",
+			"EXEC sp_configure 'xp_cmdshell', 1",
+			"RECONFIGURE"
+									){
+
+			my @results = $Connector->runsql("$query");
+			my $success=1;
+			for my $line (@results){
+				if ($line =~ /\S/){
+					$success=0;
+					print "$line";
+				}
+			}
+			if (!$success){
+				$overallSuccess=0;
+				last;
+			}
+		}
+		if (!$overallSuccess){
+			print "Failed to reenable xp_cmdshell. Sorry\n";
+			return undef;
+		}
+	} elsif ($ShellParam{'EnableXpcmdshell'} && ($ShellParam{'EnableXpcmdshell'} == 2)){
+		print "Trying to disable XP_CMDSHELL\n";
+		my $overallSuccess=1;
+		for my $query (
+
+			"EXEC sp_configure 'show advanced options', 1",
+			"RECONFIGURE",
+			"EXEC sp_configure 'xp_cmdshell', 0",
+			"RECONFIGURE"
+									){
+
+			my @results = $Connector->runsql("$query");
+			my $success=1;
+			for my $line (@results){
+				if ($line =~ /\S/){
+					$success=0;
+					print "$line";
+				}
+			}
+			if (!$success){
+				$overallSuccess=0;
+				last;
+			}
+		}
+		if (!$overallSuccess){
+			print "Failed to disable xp_cmdshell. Sorry\n";
+			return undef;
+		}
+	}
+
+	
 	# Got the connection. Test it.
 	if (!$Connector->test){
 		return undef;
@@ -152,8 +215,6 @@ sub new {
 
 	# Now we've created and partially filled the data structures,
 	# finally, do the PERL object stuff
-	my $iShell=\%Shell;
-	bless $iShell, $PKG;
 	return $iShell;
 }
 
@@ -238,12 +299,19 @@ sub Server {
 
 #== Connector Functions ==#
 
+sub connectorObject {
+	my $self=shift();
+	return $$self{'ConnectorObject'};
+}
+
 sub _ObjectArgs {
 	return (
 		"Connector",
-		"Verbose"
+		"Verbose",
+		"EnableXpcmdshell"
 	);
 }
+
 sub _isObjArg {
 	my $arg=shift();
 	my $is=0;

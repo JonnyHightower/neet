@@ -48,7 +48,6 @@ use DBI;
 sub new {
 	my $PKG=shift();
 	my %SQLServer=@_;
-
 	my %RequiredArgs;
 	$RequiredArgs{'Args'}="Host Port User Pass";
 	$RequiredArgs{'Optional'}="Host Port User Pass";
@@ -88,6 +87,28 @@ sub test {
 	}
 	return 1;	
 }
+
+sub runsql {
+	my $OBJ=shift();
+	my $sql=shift();
+	my $dbh=${$OBJ}{'Handle'};
+	my @result;
+	my $sth = $dbh->prepare("$sql");
+	my $rv = $sth->execute;
+	my @tmpresults;
+	while (@tmpresults=$sth->fetchrow_array){
+		for my $row (@tmpresults){
+			if ($row){
+				push @result, $row;
+			} else {
+				push @result, "";
+			}
+		}
+	}
+	$sth->finish;
+	return @result;
+}
+
 
 sub execute {
 	my $OBJ=shift();

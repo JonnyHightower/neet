@@ -36,9 +36,51 @@
     <div class="container">
       <section id="main_content">
 
-<h2>24th April 2014</h2>
+<h2>03 May 2014</h2>
 
-<p>These GitHub pages came into existence and will be the primary source of news about Neet. The User Guide will be updated, but updates may lag slightly behind the TiddlyWiki version which is contained in the Neet repository. When you're onsite with no Internet access, you can access that Wiki in the /opt/neet/doc/ directory.</p>
+<p>Updates to two repos, to add a couple of essential features to iShellSQL.</p>
+
+<i>neet</i>
+<ul>
+<li>Added --enable and --disable options to iShellSQL to provide control of xp_cmdshell.
+<li>Minor updates to documentation
+</ul>
+<i>neet-bundled</i>
+<ul>
+<li>Added --enable and --disable options to iShellSQL to provide control of xp_cmdshell.
+<li>Added /opt/neet/core to the Perl module search paths in iShellSQL and SQLaddaccount files.
+</ul>
+
+<h2>30th April 2014</h2>
+
+Neet version 1.1.4 is released, and contains a few minor enhancements:
+
+<ul>
+<li>Added the Warnings.Firewall parameter to the config file so the warnings about your iptables firewall can be permanently inhibited should you so choose (not necessarily a good idea!).
+<li>Updates to documentation, mainly the inclusion of the new github pages.
+</ul>
+A couple of the other repos have also been updated with bugfixes and enhancements:<br>
+<i>neet-bundled</i>
+<ul>
+<li>Fixed a configuration error that prevented Nikto from running. This was introduced during the recent restructure of Neet, and was a result of incorrect file paths in nikto.conf.
+</ul>
+<i>neet-modules</i>
+<ul>
+<li>The LDAP module now checks for default credentials, which are listed in <i>/opt/neet/resources/modules/LDAP/defaultCredentials</i> - add your own as you see fit. Thank you to Simon Clow for the suggestion.
+<li>The SMTP module copes better with rogue servers now and has better false-positive detection.
+</ul>
+<i>neet-shell</i>
+<ul>
+<li>Added columnar output to the svc command in the neet shell, so you don't have to put up with a really long single-column list on busy networks.
+<li>Fixed the testshares command so it works in both global and host mode.
+<li>The <i>socket</i> (and <i>sock</i>) aliases now return just the socket(!) and don't include the protocol or any extraneous slashes. Thank you to Rob Gilchrist for the bug report.
+</ul>
+<p>Just run <i>neet-update</i> or <i>neet --update</i> to obtain these updates. Don't forget that if you're behind a proxy you'll need to export the HTTPS_PROXY environment variable (HTTPS_PROXY=ip.ad.dr.ess:port) for wget to connect to GitHub.</p>
+
+
+<h2>29th April 2014</h2>
+
+<p>These spanking new GitHub pages will be the primary source of news about Neet and, from Neet version 1.1.4, will also comprise the user guide instead of the current TiddlyWiki. All HTML documentation will remain in the <i>/opt/neet/doc/</i> directory, whilst the man pages will continue to be installed to your system's global man page location.</p>
 
 <h2>17th April 2014</h2>
 <p>The latest release of Neet, <a href="https://github.com/JonnyHightower/neet/releases/tag/1.1.3">1.1.3</a>, incorporates a pretty big change to the overall distribution architecture, which now sees Neet components split into several distinct repositories. This allows users to obtain incremental updates to specific components without necessitating a full download/reinstall cycle for everything in Neet. For example, updates to the Neet Shell can be downloaded and seamlessly installed using only a few Kb of bandwidth, whereas previously this would have required the entire 55Mb+ installer to be manually unpacked and installed, in the process causing any existing Neet installation to be removed.</p>
