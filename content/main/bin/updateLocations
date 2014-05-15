@@ -30,7 +30,7 @@ export CONFDIR="${NEET}/etc"
 rm -f "${CONFDIR}/locations"
 echo "neet=$NEET" > "${CONFDIR}/locations"
 
-for bin in nmap amap tcptraceroute traceroute hydra wget sslscan dig rpcclient net snmpwalk ruby java \
+for bin in nmap amap tcptraceroute traceroute wget sslscan dig rpcclient net snmpwalk ruby java \
            ldapsearch medusa smbclient snmpget snmpset nmblookup rpcinfo xwd ntpdate ldapsearch \
            openssl openvas-nasl; do
 

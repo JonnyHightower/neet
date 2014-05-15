@@ -21,9 +21,10 @@
  to determine the presence of serious vulnerabilities which Neet is capable of
  exploiting.
 
-::Hydra:recommended
- THC Hydra is used for brute-force-guessing passwords for a number of authentication
- mechanisms, including MySQL, MSSQL, Windows and SSH.
+::Medusa:recommended
+ Medusa is used for brute-force-guessing passwords for a number of authentication
+ mechanisms, including MySQL, MSSQL, Windows and SSH. It has replaced THC Hydra,
+ which was used in older versions of Neet but proved to be less reliable.
 
 ::Bannergrab:recommended
  Bannergrab is used to obtain banner information from remote services. The discovery
