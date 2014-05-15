@@ -110,9 +110,10 @@ fi
 if isKali; then
   echo "Preparing Kali for neet"
 
-  for package in libnet-arp-perl libnet-ip-perl libnetaddr-ip-perl libdbd-sybase-perl medusa winexe passing-the-hash\
+  for package in libnet-arp-perl libnet-ip-perl libnetaddr-ip-perl medusa winexe passing-the-hash\
 		libnet-pcap-perl libnet1-dev libx11-protocol-perl bison ldap-utils libssl-dev libterm-readkey-perl\
-		cmake flex libglib2.0-dev libgnutls26 libgnutls-dev libpcap0.8 libpcap-dev libgpgme11-dev uuid-dev; do
+		cmake flex libglib2.0-dev libgnutls26 libgnutls-dev libpcap0.8 libpcap-dev libgpgme11-dev uuid-dev\
+		libdbi-perl libdbd-sqlite3-perl libdbd-sybase-perl; do
   	#echo
 	  #echo "**** Installing $package ****"
   	apt-get -y install $package >/dev/null 2>&1
@@ -128,9 +129,10 @@ elif isBacktrack; then
   # This is backtrack. Do the backtrack prep
   echo "Preparing Backtrack for neet"
 
-  for package in libnet-arp-perl libnet-ip-perl libnetaddr-ip-perl libdbd-sybase-perl medusa\
+  for package in libnet-arp-perl libnet-ip-perl libnetaddr-ip-perl medusa\
 		libnet-pcap-perl libnet1-dev libopenvasnasl2 libx11-protocol-perl bison ldap-utils \
-		cmake flex libglib2.0-dev libgnutls26 libgnutls-dev libpcap0.8 libpcap-dev libgpgme11-dev uuid-dev; do
+		cmake flex libglib2.0-dev libgnutls26 libgnutls-dev libpcap0.8 libpcap-dev libgpgme11-dev uuid-dev\
+    libdbi-perl libdbd-sqlite3-perl libdbd-sybase-perl; do
 
   	apt-get -y install $package >/dev/null 2>&1
 	  ERR=$?

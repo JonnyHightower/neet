@@ -31,21 +31,19 @@ rm -f "${CONFDIR}/locations"
 echo "neet=$NEET" > "${CONFDIR}/locations"
 
 for bin in nmap amap tcptraceroute traceroute hydra wget sslscan dig rpcclient net snmpwalk ruby java \
-					 ldapsearch medusa smbclient snmpget snmpset nmblookup rpcinfo xwd ntpdate ldapsearch \
-					 openssl openvas-nasl; do
+           ldapsearch medusa smbclient snmpget snmpset nmblookup rpcinfo xwd ntpdate ldapsearch \
+           openssl openvas-nasl; do
 
 	if type $bin >/dev/null 2>&1; then
-    if ! grep ^${bin}= "${CONFDIR}/locations" >/dev/null 2>&1; then
-  		OV=`type $bin 2>/dev/null | awk {print'$3'}`
-	  	echo "$bin=$OV" >> "${CONFDIR}/locations"
-    else
-  		OV=`type $bin 2>/dev/null | awk {print'$3'}`
-      cat "${CONFDIR}/locations" | grep -v ^${bin}= > "${CONFDIR}/locations.tmp"
-      mv "${CONFDIR}/locations.tmp" "${CONFDIR}/locations"
-	  	echo "$bin=$OV" >> "${CONFDIR}/locations"
-    fi
+		SystemPath=`type $bin 2>/dev/null | awk {print'$3'}`
+		if ! grep ^${bin}= "${CONFDIR}/locations" >/dev/null 2>&1; then
+			echo "$bin=$SystemPath" >> "${CONFDIR}/locations"
+		else
+			cat "${CONFDIR}/locations" | grep -v ^${bin}= > "${CONFDIR}/locations.tmp"
+			mv "${CONFDIR}/locations.tmp" "${CONFDIR}/locations"
+			echo "$bin=$SystemPath" >> "${CONFDIR}/locations"
+		fi
 	fi
-
 done
 
 OWD="$PWD"
@@ -55,7 +53,7 @@ for bin in *; do
 		echo "${bin}=${NEET}/pkg/bin/$bin" >> "${CONFDIR}/locations"
 	else
   	cat "${CONFDIR}/locations" | grep -v ^${bin}= > "${CONFDIR}/locations.tmp"
-    mv "${CONFDIR}/locations.tmp" "${CONFDIR}/locations"
+		mv "${CONFDIR}/locations.tmp" "${CONFDIR}/locations"
 		echo "${bin}=${NEET}/pkg/bin/$bin" >> "${CONFDIR}/locations"
 	fi
 done
