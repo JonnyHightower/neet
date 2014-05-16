@@ -114,37 +114,19 @@ echo
 if [ ! -z $DISTRO ] && [ -f "install/pkg/$DISTRO" ]; then
 	# Best case - we know exactly what it is
 	echo "  Installing pre-requisites for $DISTRO"
-	for package in `cat "install/pkg/$DISTRO"`; do
-		apt-get -y install $package >/dev/null 2>&1
-		ERR=$?
-		if [ $ERR -ne 0 ]; then
-			echo
-			echo "  There was a problem installing $package."
-			echo "  Installation will terminate here."
-			exit 1
-		fi
-	done
+	apt-get-list "install/pkg/$DISTRO"
 
 elif [ ! -z $FALLBACK ] && [ -f "install/pkg/$FALLBACK" ]; then
 	# Second-best case - we don't have a definitive list
 	# of pre-requisites but we have a reasonable idea.
 	echo "  Couldn't determine your exact distribution."
 	echo "  Using pre-requisite listing for $FALLBACK instead."
-	for package in `cat "install/pkg/$FALLBACK"`; do
-		apt-get -y install $package >/dev/null 2>&1
-		ERR=$?
-		if [ $ERR -ne 0 ]; then
-			echo "  There was a problem installing $package."
-			# Don't terminate the installation: can't be too fascist if
-			# we don't know the distro.
-		fi
-	done
+	apt-get-list "install/pkg/$FALLBACK"
 
 else
 	# We really have no idea
 	echo "  Couldn't determine your distribution. You'll have to find any missing"
 	echo "  dependencies yourself."
-
 fi
 
 # Check the build environment

@@ -223,7 +223,7 @@ my $controlDirectory=".neet";
 $MainScan->ControlDirectory($controlDirectory);
 
 # Credential database
-$MainScan->CredentialManager(Neet::CredentialManager->new(".credentialManager"));
+$MainScan->CredentialManager(Neet::CredentialManager->new);
 
 # Program mode flags
 my $help=0;
