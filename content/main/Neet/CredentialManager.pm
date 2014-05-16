@@ -316,5 +316,71 @@ sub selectCredentials {
 	return @arrayOfHashes;
 }
 
+sub modifyCredential {
+	my $self=shift();
+	my %data=@_;
+
+	# The credential ID to update is supplied by the user
+	if (!exists($data{'id'}) || !defined($data{'id'})){
+		return 0;
+	}
+	my $id=$data{'id'};
+
+	# Always store the type in lower case, and system in upper case.
+	# This will avoid problems with the filtering when listing lots
+	# of credentials.
+	$data{'type'}=lc($data{'type'}) if (defined($data{'type'}));	
+	$data{'system'}=uc($data{'system'}) if (defined($data{'system'}));	
+
+	my $dbh = $self->connectDb();
+	if (!defined($dbh)){
+		return 0;
+	}
+
+	# Make sure we have the DB
+	if (-z $$self{'path'}){
+		return 0;
+	}
+
+	# Take care of cases where the domain has been supplied in DOMAIN\User form:
+	if (defined($data{'user'}) && ($data{'user'} =~ /\S+\\\w/) && !defined($data{'domain'})){
+		my ($domain,$user)=split ("\\\\", $data{'user'}, 2);
+		$data{'user'}=$user;
+		$data{'domain'}=$domain;
+	}
+
+	# Take care of cases where the domain has been supplied in user@domain form:
+	if (defined($data{'user'}) && ($data{'user'} =~ /\S+\@\S+/) && !defined($data{'domain'})){
+		my ($user,$domain)=split ("@", $data{'user'}, 2);
+		$data{'user'}=$user;
+		$data{'domain'}=$domain;
+	}
+
+	# Get the existing data for the credential
+	my $sth = $dbh->prepare('SELECT * from credentials where id = ?');
+	$sth->execute($id);
+	my @fields=("id","privilege","tag","type","rid","user","pass","domain","system","comment");
+	my %updated;	
+
+	my @row = $sth->fetchrow;
+	for my $field (@fields){
+		$updated{$field}=shift(@row);
+		# Override the existing data with the user-supplied data
+		$updated{$field}=$data{$field} if (defined($data{$field}));
+	}
+	$sth->finish();
+
+	# Now update the database with the modified data
+	$sth = $dbh->prepare('UPDATE credentials SET privilege=?, tag=?, type=?, rid=?, user=?, pass=?, domain=?, system=?, comment=? WHERE id=?');
+	$sth->execute($updated{'privilege'}, $updated{'tag'}, $updated{'type'}, $updated{'rid'}, $updated{'user'}, $updated{'pass'}, $updated{'domain'}, $updated{'system'}, $updated{'comment'},$id);
+	$sth->finish();
+	$dbh->disconnect;
+
+	return 0 if (!defined($sth));
+	return 1;
+}
+
+
+
 1;
 
