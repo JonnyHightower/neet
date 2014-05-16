@@ -6,6 +6,9 @@ libnet-arp-perl
 libnet-ip-perl
 libnetaddr-ip-perl
 libterm-readkey-perl
+libnet-rawip-perl
+libxml-parser-perl
+libxml-twig-perl
 
 libssl-dev
 libglib2.0-dev
@@ -15,6 +18,8 @@ libnet1-dev
 libpcap0.8
 libpcap-dev
 libnet-pcap-perl
+libnetpacket-perl
+libnet-write-perl
 libgpgme11-dev
 uuid-dev
 libdbi-perl
@@ -23,7 +28,15 @@ libdbd-sybase-perl
 libx11-protocol-perl
 libopenvasnasl2
 
+snmp
+sslscan
+nmap
+ruby
 ldap-utils
 medusa
+
+
+
+
 
 
