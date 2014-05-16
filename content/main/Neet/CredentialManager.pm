@@ -24,10 +24,6 @@
 
 # TODO
 # > Uniqueness checking when adding entries
-# > Returning results as a series of hashes, and letting
-#   the receiver do any output prettifying.
-# > Privileged account field/indicator?
-# > Tag field (for example, hist, used or current in WCE output
 
 package Neet::CredentialManager;
 
@@ -359,10 +355,13 @@ sub modifyCredential {
 	# Get the existing data for the credential
 	my $sth = $dbh->prepare('SELECT * from credentials where id = ?');
 	$sth->execute($id);
+
 	my @fields=("id","privilege","tag","type","rid","user","pass","domain","system","comment");
 	my %updated;	
 
 	my @row = $sth->fetchrow;
+	return 0 if ($#row < 0);
+
 	for my $field (@fields){
 		$updated{$field}=shift(@row);
 		# Override the existing data with the user-supplied data
