@@ -278,6 +278,33 @@ function minVersion {
 	return $error
 }
 
+function selectDistro {
+	# TODO: Support for Arch, Gentoo, Debian, Slackware, CentOS
+	unset FALLBACK # Will contain a fallback (similar) distro if we can't detect
+                 # the real deal
+	unset DISTRO # Will contain the precise distribution we're using
+
+	if [ -f /etc/os-release ]; then
+		FALLBACK=kali
+		type=`grep ^ID= /etc/os-release | awk -F= {print'$2'}`
+		version=`grep ^VERSION_ID= /etc/os-release | awk -F= {print'$2'} | sed -e 's/"//g'` 
+
+		if [ ! -z $type ] && [ ! -z $version ]; then
+			DISTRO="${type}-${version}"
+		fi
+
+	elif [ -f /etc/debian_version ]; then
+		FALLBACK=kali
+		if grep "Kali Linux 1" /etc/debian_version >/dev/null; then
+			DISTRO="kali"
+
+		elif [ -d /pentest/tunneling/pwnat ]; then
+			# Could do with a better way to detect this....
+			DISTRO="backtrack"
+		fi
+	fi
+}
+
 function isKali {
 	if [ -f /etc/debian_version ] && grep "Kali Linux 1" /etc/debian_version >/dev/null; then
 		true

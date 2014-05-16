@@ -48,7 +48,7 @@ sub new {
 	$CLI{'allowed'}=\@allowed;
 	$CLI{'multis'}=\@multis;
 	$CLI{'args'}=\@cli;
-	$CLI{'struct'}=\@struct;
+	$CLI{'struct'}=$struct;
 	$CLI{'params'}=\@params;
 	$CLI{'needsparam'}=\@needsparam;
 	$CLI{'Short'}=\%Short;

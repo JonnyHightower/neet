@@ -34,6 +34,8 @@ use Storable;
 use Term::ReadKey;
 use Time::HiRes qw( usleep ualarm );
 use Fcntl ':flock';
+use DBI;
+use DBD::SQLite;
 
 # Neet-specific Modules
 use Neet::Logging;
@@ -42,8 +44,9 @@ use Neet::ServiceDiscovery;
 use Neet::OSDetect;
 use Neet::Util;
 use Neet::GlobalServiceMonitor;
-use Neet::API;
+#use Neet::API;
 use Neet::threads;
+use Neet::CredentialManager;
 
 # Jon Roach's General Modules
 use JR::Files::Config;
@@ -53,7 +56,7 @@ use JR::Parsers::OutputParser;
 use JR::Parsers::CLI;
 use JR::Parsers::Nmap;
 
-my $VERSION="1.1.5";
+my $VERSION="1.1.6";
 
 my $UID=`/usr/bin/id -u`; chomp $UID;
 if ($UID > 0){
@@ -218,6 +221,9 @@ my $CPUs=$MainScan->CPUs;
 # Set up the control directory.
 my $controlDirectory=".neet";
 $MainScan->ControlDirectory($controlDirectory);
+
+# Credential database
+$MainScan->CredentialManager(Neet::CredentialManager->new(".credentialManager"));
 
 # Program mode flags
 my $help=0;

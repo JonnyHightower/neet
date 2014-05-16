@@ -267,6 +267,15 @@ sub ControlDirectory {
 	}
 }
 
+sub CredentialManager {
+	my $self=shift();
+	my $manager=shift();
+	if (defined($manager)){
+		$$self{'CredentialManager'}=$manager;
+	}
+	return $$self{'CredentialManager'};
+}
+
 sub ResultsDirectory {
 	my $self=shift();
 	return $$self{'ResultsDirectory'};

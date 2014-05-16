@@ -106,40 +106,45 @@ if [ $UPDATEONLY -eq 1 ]; then
 	exit 0
 fi
 
-# If this is Kali, do the prep
-if isKali; then
-  echo "Preparing Kali for neet"
+# This is the main installation process, not just an update.
+# If we can, download any dependencies from the distro repo.
+selectDistro
+echo
 
-  for package in libnet-arp-perl libnet-ip-perl libnetaddr-ip-perl libdbd-sybase-perl medusa winexe passing-the-hash\
-		libnet-pcap-perl libnet1-dev libx11-protocol-perl bison ldap-utils libssl-dev libterm-readkey-perl\
-		cmake flex libglib2.0-dev libgnutls26 libgnutls-dev libpcap0.8 libpcap-dev libgpgme11-dev uuid-dev; do
-  	#echo
-	  #echo "**** Installing $package ****"
-  	apt-get -y install $package >/dev/null 2>&1
-  	ERR=$?
-  	if [ $ERR -ne 0 ]; then
-  		echo "There was a problem installing $package."
-	  	echo "Installation will terminate here."
-		  exit 1;
-	  fi
-  done
+if [ ! -z $DISTRO ] && [ -f "install/pkg/$DISTRO" ]; then
+	# Best case - we know exactly what it is
+	echo "  Installing pre-requisites for $DISTRO"
+	for package in `cat "install/pkg/$DISTRO"`; do
+		apt-get -y install $package >/dev/null 2>&1
+		ERR=$?
+		if [ $ERR -ne 0 ]; then
+			echo
+			echo "  There was a problem installing $package."
+			echo "  Installation will terminate here."
+			exit 1
+		fi
+	done
 
-elif isBacktrack; then
-  # This is backtrack. Do the backtrack prep
-  echo "Preparing Backtrack for neet"
+elif [ ! -z $FALLBACK ] && [ -f "install/pkg/$FALLBACK" ]; then
+	# Second-best case - we don't have a definitive list
+	# of pre-requisites but we have a reasonable idea.
+	echo "  Couldn't determine your exact distribution."
+	echo "  Using pre-requisite listing for $FALLBACK instead."
+	for package in `cat "install/pkg/$FALLBACK"`; do
+		apt-get -y install $package >/dev/null 2>&1
+		ERR=$?
+		if [ $ERR -ne 0 ]; then
+			echo "  There was a problem installing $package."
+			# Don't terminate the installation: can't be too fascist if
+			# we don't know the distro.
+		fi
+	done
 
-  for package in libnet-arp-perl libnet-ip-perl libnetaddr-ip-perl libdbd-sybase-perl medusa\
-		libnet-pcap-perl libnet1-dev libopenvasnasl2 libx11-protocol-perl bison ldap-utils \
-		cmake flex libglib2.0-dev libgnutls26 libgnutls-dev libpcap0.8 libpcap-dev libgpgme11-dev uuid-dev; do
+else
+	# We really have no idea
+	echo "  Couldn't determine your distribution. You'll have to find any missing"
+	echo "  dependencies yourself."
 
-  	apt-get -y install $package >/dev/null 2>&1
-	  ERR=$?
-	  if [ $ERR -ne 0 ]; then
-  		echo "There was a problem installing $package."
-	  	echo "Installation will terminate here."
-  		exit 1;
-  	fi
-  done
 fi
 
 # Check the build environment

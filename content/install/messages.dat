@@ -21,9 +21,10 @@
  to determine the presence of serious vulnerabilities which Neet is capable of
  exploiting.
 
-::Hydra:recommended
- THC Hydra is used for brute-force-guessing passwords for a number of authentication
- mechanisms, including MySQL, MSSQL, Windows and SSH.
+::Medusa:recommended
+ Medusa is used for brute-force-guessing passwords for a number of authentication
+ mechanisms, including MySQL, MSSQL, Windows and SSH. It has replaced THC Hydra,
+ which was used in older versions of Neet but proved to be less reliable.
 
 ::Bannergrab:recommended
  Bannergrab is used to obtain banner information from remote services. The discovery
@@ -55,25 +56,30 @@
  Net::ARP is used by fwdetect to determine which interfaces will forward packets. It
  can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
  command-line tool will fetch the module and any of its dependencies for you directly
- from the CPAN if you have Internet access.
+ from the CPAN if you have Internet access, or install it from your distribution's
+ package repositories.
 
 ::Net-RawIP:recommended
  Net::RawIP is used by fwdetect to determine which interfaces will forward packets. It
  can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
  command-line tool will fetch the module and any of its dependencies for you directly
- from the CPAN if you have Internet access.
+ from the CPAN if you have Internet access, or install it from your distribution's
+ package repositories.
 
 ::DBD-Sybase:recommended
  DBD-Sybase is used by Neet to create a Windows shell when connected to MS-SQL databases.
  It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
  command-line tool will fetch the module and any of its dependencies for you directly
- from the CPAN if you have Internet access.
+ from the CPAN if you have Internet access, or install it from your distribution's
+ package repositories.
 
 ::DBI:recommended
- DBI is used by Neet to create a Windows shell when connected to MS-SQL databases.
+ DBI is used by Neet to create a Windows shell when connected to MS-SQL databases. It
+ is also used by the credential manager.
  It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
  command-line tool will fetch the module and any of its dependencies for you directly
- from the CPAN if you have Internet access.
+ from the CPAN if you have Internet access, or install it from your distribution's
+ package repositories.
 
 ::NetAddr-IP:critical
  NetAddr::IP is used by the discovery engine to determine which interface is 
@@ -81,13 +87,15 @@
  conversions. The discovery engine will not work without this core module.
  It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
  command-line tool will fetch the module and any of its dependencies for you directly
- from the CPAN if you have Internet access.
+ from the CPAN if you have Internet access, or install it from your distribution's
+ package repositories.
 
 ::Net-Pcap:recommended
  This module is required by the Net::PcapUtils module.
  It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
  command-line tool will fetch the module and any of its dependencies for you directly
- from the CPAN if you have Internet access.
+ from the CPAN if you have Internet access, or install it from your distribution's
+ package repositories.
 
 ::Net-PcapUtils:recommended
  This module is required by fwdetect to determine which interfaces will forward packets.
@@ -114,5 +122,18 @@
  This module is required for testing of some services which are accessed through SSL.
  It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
  command-line tool will fetch the module and any of its dependencies for you directly
- from the CPAN if you have Internet access.
+ from the CPAN if you have Internet access, or install it from your distribution's
+ package repositories.
+
+::DBD-SQLite:recommended
+ This module is required for the credential manager. If you don't have this module,
+ you'll see some ugly output while running Neet, and the various modules will not be
+ able to store and share credentials in a meaningful way.
+ It can be downloaded and compiled from http://www.cpan.org. Alternatively, the cpan 
+ command-line tool will fetch the module and any of its dependencies for you directly
+ from the CPAN if you have Internet access, or install it from your distribution's
+ package repositories.
+
+
+
 

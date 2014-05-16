@@ -197,6 +197,11 @@ sub Exautosafe {
 	my $id=shift();
 	return $$self{$id}{'exautosafe'};
 }
+sub Credentialtype {
+	my $self=shift();
+	my $id=shift();
+	return $$self{$id}{'credentialtype'};
+}
 sub NoTest {
 	my $self=shift();
 	my $id=shift();
