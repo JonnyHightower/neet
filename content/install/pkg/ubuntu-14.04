@@ -34,7 +34,7 @@ nmap
 ruby
 ldap-utils
 medusa
-
+ntpdate
 
 
 
