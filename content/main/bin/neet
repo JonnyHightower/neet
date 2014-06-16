@@ -56,7 +56,7 @@ use JR::Parsers::OutputParser;
 use JR::Parsers::CLI;
 use JR::Parsers::Nmap;
 
-my $VERSION="1.1.6";
+my $VERSION="1.1.7";
 
 my $UID=`/usr/bin/id -u`; chomp $UID;
 if ($UID > 0){
@@ -223,7 +223,7 @@ my $controlDirectory=".neet";
 $MainScan->ControlDirectory($controlDirectory);
 
 # Credential database
-$MainScan->CredentialManager(Neet::CredentialManager->new(".credentialManager"));
+$MainScan->CredentialManager(Neet::CredentialManager->new);
 
 # Program mode flags
 my $help=0;

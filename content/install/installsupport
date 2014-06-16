@@ -278,6 +278,22 @@ function minVersion {
 	return $error
 }
 
+function apt-get-list {
+	local LIST="$1"
+	ERROR=0
+	for package in `cat "$LIST"`; do
+		apt-get -y install $package >/dev/null 2>&1
+		echo -n "."
+		ERR=$?
+		if [ $ERR -ne 0 ]; then
+			echo
+			echo "  There was a problem installing $package."
+			ERROR=1
+		fi
+	done
+	echo
+}
+
 function selectDistro {
 	# TODO: Support for Arch, Gentoo, Debian, Slackware, CentOS
 	unset FALLBACK # Will contain a fallback (similar) distro if we can't detect
