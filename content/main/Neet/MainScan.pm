@@ -242,7 +242,7 @@ sub getPath {
 sub CreateControlDirectory {
 	my $self=shift();
 	if (! -d $$self{'ControlDirectory'}){
-		system ("mkdir -p $$self{'ControlDirectory'}");
+		system ("mkdir -p \"$$self{'ControlDirectory'}\"");
 		if (-d "$$self{'ControlDirectory'}"){
 			return 1;
 		} else {
