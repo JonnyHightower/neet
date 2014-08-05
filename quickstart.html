@@ -54,6 +54,10 @@
 
 <p>In Internet mode, or when scanning any group of non-local hosts you may wish to tune the criteria used to determine when a host is considered dead or alive, as non-local hosts are likely to be filtered and cannot be reached via ARP. This is discussed in the Host Discovery section.</p>
 
+<h2>Excluding Operating Systems</h2>
+
+<p>Neet allows you to exclude hosts from further scanning based on the operating system detected. For example, if a client tells you not to bother scanning their 250 XP workstations as they are being decommissioned next week, you can use the <i>-O</i> (<i>--exclude-os</i>) option to achieve this, specifying a regex that will match some unique part of the OS name. For example: <pre>neet eth0 --exclude-os=XP</pre> This would initially cause all machines on the eth0 network to be scanned. However, scans will be stopped on any machines identified as running Windows XP as soon as the OS identification is made.</p>
+
       </section>
     </div>
 
