@@ -1336,9 +1336,10 @@ sub Backticks {
 
 	if ($command){
 		#$command=$self->shellEscape("$command");
-		if (index($command,"/") > -1){
-			if (! -x "$command"){
-				$$self{'Log'}->Warn ("Execution handler: Couldn't find and execute $command");
+		my @commandParts=split " ", $command;
+		if (index($commandParts[0],"/") > -1){
+			if (! -x "$commandParts[0]"){
+				$$self{'Log'}->Warn ("Execution handler: Couldn't find and execute $commandParts[0]");
 				return undef;
 			}
 		}
@@ -1380,9 +1381,10 @@ sub TimedBackticks {
 	my $quiet=shift();
 	my @results;
 	if ($command){
-		if (index($command,"/") > -1){
-			if (! -x "$command"){
-				$$self{'Log'}->Warn ("Timed execution handler: Couldn't find and execute $command");
+		my @commandParts=split " ", $command;
+		if (index($commandParts[0],"/") > -1){
+			if (! -x "$commandParts[0]"){
+				$$self{'Log'}->Warn ("Timed execution handler: Couldn't find and execute $commandParts[0]");
 				return undef;
 			}
 		}
@@ -1419,9 +1421,10 @@ sub System {
 	my $quiet=shift();
 	if ($command){
 		#$command=$self->shellEscape("$command");
-		if (index($command,"/") > -1){
-			if (! -x "$command"){
-				$$self{'Log'}->Warn ("Execution handler: Couldn't find and execute $command");
+		my @commandParts=split " ", $command;
+		if (index($commandParts[0],"/") > -1){
+			if (! -x "$commandParts[0]"){
+				$$self{'Log'}->Warn ("Execution handler: Couldn't find and execute $commandParts[0]");
 				return undef;
 			}
 		}
@@ -1440,9 +1443,10 @@ sub TimedSystem {
 	my $command=shift();
 	my $quiet=shift();
 	if ($command){
-		if (index($command,"/") > -1){
-			if (! -x "$command"){
-				$$self{'Log'}->Warn ("Timed execution handler: Couldn't find and execute $command");
+		my @commandParts=split " ", $command;
+		if (index($commandParts[0],"/") > -1){
+			if (! -x "$commandParts[0]"){
+				$$self{'Log'}->Warn ("Timed execution handler: Couldn't find and execute $commandParts[0]");
 				return undef;
 			}
 		}
