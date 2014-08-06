@@ -14,8 +14,6 @@ if (!$repo || (index($repo,"neet") != 0)  ) {
 my $version;
 my $URI="https://github.com/JonnyHightower/$repo/blob/master/VERSION";
 my @data=`wget "$URI" -q -O - 2>&1`;
-#my @data;
-#push @data, "blob-line-code>1.2.0<dash>";
 for my $line (@data){
 	next if (index($line,"blob-line-code")<0);
 	$line =~ s/\r//g;

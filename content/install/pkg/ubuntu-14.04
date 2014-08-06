@@ -10,6 +10,9 @@ libnet-rawip-perl
 libxml-parser-perl
 libxml-twig-perl
 
+smbclient
+nfs-common
+
 libssl-dev
 libglib2.0-dev
 libgnutls26
@@ -27,6 +30,7 @@ libdbd-sqlite3-perl
 libdbd-sybase-perl
 libx11-protocol-perl
 libopenvasnasl2
+libopenvasnasl2-dev
 
 snmp
 sslscan
