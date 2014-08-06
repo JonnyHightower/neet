@@ -36,6 +36,27 @@
     <div class="container">
       <section id="main_content">
 
+<h2>05 August 2014</h2>
+
+<p>A few updates have been made over the last couple of months, although this page hasn't been updated each time. The changes include a few bug fixes, some cool new features in hivedump, and the addition of the uber useful credential manager.</p>
+
+<i>Bug fixes</i>
+<ul>
+<li>It's now OK to run Neet in a path which contains spaces.
+<li>A couple of updates to the installer on Ubuntu and support for 14.04 (thank you Simon Fletcher).
+<li>Removed all trace of Hydra - it's now been fully replaced by Medusa.
+<li>Windows tools needing credentials (hivedump, gethash, mimikatz) now cope with blank passwords (thank you Luke Gogolkiewicz).
+<li>NFS timings adjusted for reliability. Also, now defaults to NFSv3 for mounting remote exports.
+<li>Misc improvements to the neet shell aliases.
+</ul>
+
+<i>Significant new features since the last news post</i>
+<ul>
+<li>Hivedump will now retrieve the SAM, SYSTEM and SECURITY registry hives from a remote machine, and extract the credentials locally. It will also automatically retrieve NTDS.dit from Domain Controllers using the Volume Shadow Copy service, and will locally extract the hashes from the retrieved copy. Getting hashes, LSA credentials and cached credentials from Windows servers couldn't be easier or safer. In the neet shell run <i>hivedump</i> with no arguments for usage. Outside neetsh, give the full path <i>/opt/neet/neetsh/hivedump</i>.
+<li><b>Credential manager</b> is a very comprehensive manager for passwords and credentials. You can manually add credentials you find (be they hashes, username/password combos, passwords), and sort and retrieve them using specified criteria. For example, you could retrieve just the user accounts for a particular domain, or just Oracle passwords, and export them in CVS format (or other formats). You can import pwdump files (from hivedump), or import arbitrary CVS-style password lists (you can specify the format on the command line). The <i>accounts</i> command is used to access the credential store. Use <i>accounts -h</i> or <i>accounts --help</i> for very comprehensive usage instructions and a set of 22 examples of usage. Neet modules which perform account password checks now use this manager (via the API, which you can use to integrate your own code with the credential manager) for password storage. Read more <a href="credentials.html">here</a>.
+</ul>
+
+
 <h2>03 May 2014</h2>
 
 <p>Updates to three repos, to add a couple of essential features to iShellSQL.</p>
