@@ -1330,13 +1330,20 @@ sub shellEscape {
 sub Backticks {
 	my $self=shift();
 	my $Log=$$self{'Log'};
-	my $cmd=shift();
+	my $command=shift();
 	my $quiet=shift();
 	my @results;
-	if ($cmd){
-		#$cmd=$self->shellEscape("$cmd")
-		$Log->Exec ("Executing: $cmd") if (!$quiet);
-		@results=`$cmd`;
+
+	if ($command){
+		#$command=$self->shellEscape("$command");
+		if (index($command,"/") > -1){
+			if (! -x "$command"){
+				$$self{'Log'}->Warn ("Execution handler: Couldn't find and execute $command");
+				return undef;
+			}
+		}
+		$Log->Exec ("Executing: $command") if (!$quiet);
+		@results=`$command`;
 		my $rc=$?; $rc = $rc >> 8;
 		return $rc,@results;
 	}
@@ -1373,6 +1380,13 @@ sub TimedBackticks {
 	my $quiet=shift();
 	my @results;
 	if ($command){
+		if (index($command,"/") > -1){
+			if (! -x "$command"){
+				$$self{'Log'}->Warn ("Timed execution handler: Couldn't find and execute $command");
+				return undef;
+			}
+		}
+
 		$SIG{'ALRM'}=sub {
 			die ("TIMEOUT");
 		};
@@ -1401,12 +1415,19 @@ sub TimedBackticks {
 sub System {
 	my $self=shift();
 	my $Log=$$self{'Log'};
-	my $cmd=shift();
+	my $command=shift();
 	my $quiet=shift();
-	if ($cmd){
-		#$cmd=$self->shellEscape("$cmd")
-		$Log->Exec ("Executing: $cmd") if (!$quiet);
-		my $error=system("$cmd");
+	if ($command){
+		#$command=$self->shellEscape("$command");
+		if (index($command,"/") > -1){
+			if (! -x "$command"){
+				$$self{'Log'}->Warn ("Execution handler: Couldn't find and execute $command");
+				return undef;
+			}
+		}
+
+		$Log->Exec ("Executing: $command") if (!$quiet);
+		my $error=system("$command");
 		$error = $error >> 8;
 		return $error;
 	}
@@ -1419,6 +1440,13 @@ sub TimedSystem {
 	my $command=shift();
 	my $quiet=shift();
 	if ($command){
+		if (index($command,"/") > -1){
+			if (! -x "$command"){
+				$$self{'Log'}->Warn ("Timed execution handler: Couldn't find and execute $command");
+				return undef;
+			}
+		}
+
 		$SIG{'ALRM'}=sub {
 			die ("TIMEOUT");
 		};
