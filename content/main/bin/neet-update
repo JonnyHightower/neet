@@ -77,7 +77,7 @@ for repo in $REPOS; do
 		remote=`${NEET}/core/githubVersion $repo $installed`
 		if [ -z $remote ]; then
 			if [ "$installed" != "0.0.0" ]; then
-				echo " - Package $repo is at the latest version ($installed)."
+				echo " - Package $repo is already at the latest version ($installed)."
 			else
 				echo " - Package $repo is not available."
 			fi
@@ -131,4 +131,12 @@ for repo in $REPOS; do
 		echo "   - Could not find this component. Not updating."
 	fi
 done
+
+# Warn about metasploit
+if [ ! -x /opt/metasploit/app/msfcli ]; then
+	echo
+	echo "!!! Could not find Metasploit installation. This will badly affect the"
+	echo "    exploit functions in the Neet shell (and may kill your pets)."
+	echo
+fi
 
