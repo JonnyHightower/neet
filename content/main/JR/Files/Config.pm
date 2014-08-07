@@ -33,14 +33,15 @@ sub new {
 	my $file=shift();
 	my @contents;
 	my %Config;
-	if ($file && -f "$file" && open(F,"$file")){
-		until (eof F){
-			my $line=readline (*F);
+	my $F;
+	if ($file && -f "$file" && open($F,"$file")){
+		until (eof $F){
+			my $line=readline (*$F);
 			next if (($line !~ /\S/) || ($line =~ /^[\s]{0,}\#/));
 			chomp $line;
 			push @contents,$line
 		}
-		close F;
+		close $F;
 	} else {
 		return 0;
 	}
@@ -111,7 +112,7 @@ sub GetClassKeys {
 	return @keys;
 }
 
-sub UpdateValue {
+sub UpdateValueInFile {
 	my $self=shift();
 	my $class=shift();
 	my $value=shift();
