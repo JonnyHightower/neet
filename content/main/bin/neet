@@ -56,7 +56,7 @@ use JR::Parsers::OutputParser;
 use JR::Parsers::CLI;
 use JR::Parsers::Nmap;
 
-my $VERSION="1.1.10";
+my $VERSION="1.1.11";
 
 my $UID=`/usr/bin/id -u`; chomp $UID;
 if ($UID > 0){
@@ -111,15 +111,24 @@ $SIG{'USR1'} = sub {
 	Neet::threads->exit();
 };
 
-my $CONFIG_FILE="/opt/neet/etc/neet.conf";
 my $BINARIES="/opt/neet/etc/locations";
+my $CONFIG_FILE="/opt/neet/etc/neet.conf";
+if (-f "$ENV{'HOME'}/.neet/neet.conf"){
+	$CONFIG_FILE="$ENV{'HOME'}/.neet/neet.conf";
+}
 
 my $Config=Config->new($CONFIG_FILE);
-my $Binaries=Config->new($BINARIES);
+my $ConfigOverride=0;
 
 if (!$Config){
 	die "Couldn't read config file $CONFIG_FILE\n";
 }
+my $VceCONFIG_FILE="/opt/neet/etc/vce.conf";
+if (-f "$ENV{'HOME'}/.neet/vce.conf"){
+	$VceCONFIG_FILE="$ENV{'HOME'}/.neet/vce.conf";
+}
+
+my $Binaries=Config->new($BINARIES);
 
 # Logging
 my $Log=Neet::Logging->new();
@@ -132,6 +141,7 @@ if ($InverseVideo && ($InverseVideo == 1)){
 
 mkdir ("logs");
 $Log->LogFile("logs/" . $Config->GetVal("LogFile"));
+
 # Preserve log files from previous sessions
 if (-f "logs/" . $Config->GetVal("LogFile")){
 	system ("cat logs/" . $Config->GetVal("LogFile") . " >> logs/" . $Config->GetVal("LogFile") . "-archive && rm logs/" . $Config->GetVal("LogFile"));
@@ -697,6 +707,8 @@ if ($rungsms){
 
 $Log->Info (Mid(Stamp()),'PRINTONLY');
 $Log->Info ("-> Using command line: " . $CLI->CommandLine . "\n");
+$Log->OK ("-> Using master config file $CONFIG_FILE\n");
+$Log->OK ("-> Using vulnerability check and exploitation config file $VceCONFIG_FILE\n");
 
 if ($discoverServices){
 
