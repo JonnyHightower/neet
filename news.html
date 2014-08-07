@@ -36,6 +36,19 @@
     <div class="container">
       <section id="main_content">
 
+<h2>07 August 2014</h2>
+
+<i>New features</i>
+<ul>
+<li>You can now install your own configuration files in <i>$HOME/.neet/neet.conf</i> and/or <i>$HOME/.neet/vce.conf</i>. If either exists, it will will be used instead of the default version found in <i>/opt/neet/etc/</i>. This allows you to preserve your own configuration across updates to the neet core, which normally overwrites the default config files. Thanks to Simon Fletcher for the suggestion.
+</ul>
+
+<i>Bug fixes</i>
+<ul>
+<li>Some modules were not flagging guessed credentials as a vulnerability (although they were recording the guessed credentials in the credential manager). This was a bug introduced by the migration to the credential manager. Thanks to Simon Fletcher for reporting this.<BR> The affected modules were Oracle, FTP, LDAP and SSH. All have now been fixed.
+</ul>
+
+
 <h2>05 August 2014</h2>
 
 <p>A few updates have been made over the last couple of months, although this page hasn't been updated each time. The changes include a few bug fixes, some cool new features in hivedump, and the addition of the uber useful credential manager.</p>
