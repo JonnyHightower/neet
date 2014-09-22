@@ -15,7 +15,7 @@ my $version;
 my $URI="https://github.com/JonnyHightower/$repo/blob/master/VERSION";
 my @data=`wget "$URI" -q -O - 2>&1`;
 for my $line (@data){
-	next if (index($line,"blob-line-code")<0);
+	next if (index($line,"blob-code js-file-line")<0);
 	$line =~ s/\r//g;
 	$line =~ s/^[\s\S]+>(\d+\.\d+\.\d+)<[\s\S]+$/$1/;
 	next if ($line !~ /^\d+\.\d+\.\d+$/);
