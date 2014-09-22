@@ -12,12 +12,12 @@ if (!$repo || (index($repo,"neet") != 0)  ) {
 }
 
 my $version;
-my $URI="https://github.com/JonnyHightower/$repo/blob/master/VERSION";
+my $URI="https://api.github.com/repos/jonnyhightower/$repo/releases";
 my @data=`wget "$URI" -q -O - 2>&1`;
 for my $line (@data){
-	next if (index($line,"blob-code js-file-line")<0);
+	next if (index($line,"tag_name\":")<0);
 	$line =~ s/\r//g;
-	$line =~ s/^[\s\S]+>(\d+\.\d+\.\d+)<[\s\S]+$/$1/;
+	$line =~ s/^[\s\S]+:\s+"(\d+\.\d+\.\d+)",[\s\S]+$/$1/;
 	next if ($line !~ /^\d+\.\d+\.\d+$/);
 	if ($testAgainst && ($testAgainst =~ /^\d+\.\d+\.\d+$/)){
 		my @latest=split "\\.", $line;
@@ -53,6 +53,4 @@ for my $line (@data){
 	}
 }
 exit 1;
-
-
 
