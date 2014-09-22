@@ -56,7 +56,7 @@ use JR::Parsers::OutputParser;
 use JR::Parsers::CLI;
 use JR::Parsers::Nmap;
 
-my $VERSION="1.1.12";
+my $VERSION="1.1.13";
 
 my $UID=`/usr/bin/id -u`; chomp $UID;
 if ($UID > 0){
