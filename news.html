@@ -36,6 +36,15 @@
     <div class="container">
       <section id="main_content">
 
+<h2>22 September 2014</h2>
+
+<b>Bug fixes</b>
+<ul>
+<li><b>Neet-update</b> in versions up to and including 1.1.11 were affected by a change in the GitHub page layout. The script parsed the GitHub HTML to discover the latest version of each package repository. Those versions of Neet-update no longer work.<BR>
+
+As a fix, you can manually download and extract the tarball for the <a href="https://github.com/JonnyHightower/neet/releases">latest release of the Neet repository</a> and, as root, copy the <i>content/install/githubVersion</i> script to the <i>/opt/neet/core/</i> directory, replacing the existing script. Neet-update will then work properly, using the GitHub API to discover version information.<BR>Thanks to Simon Clow for reporting this.
+</ul>
+
 <h2>07 August 2014</h2>
 
 <i>New features</i>
