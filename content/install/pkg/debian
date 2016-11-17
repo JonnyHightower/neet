@@ -31,7 +31,6 @@ libdbd-sybase-perl
 libx11-protocol-perl
 libopenvasnasl2
 libopenvasnasl2-dev
-libcurl-dev
 
 snmp
 sslscan

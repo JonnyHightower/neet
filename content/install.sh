@@ -138,7 +138,7 @@ for build in gcc ld make; do
 		echo "   is required for neet installation. What kind of pentester doesn't have a build"
 		echo "   environment? Debian/Ubuntu users are advised to install the gcc, make, autoconf,"
 		echo "   automake, flex and bison packages. Fedora and Mandrake users are advised to"
-		echo "   upgrade to a decent distribution. Gentoo users should never, ever read this."
+		echo "   upgrade to a decent distribution. Gentoo and Arch users should never, ever read this."
 		echo
 		touch install/error
 		exit 1

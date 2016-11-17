@@ -296,29 +296,48 @@ function apt-get-list {
 
 function selectDistro {
 	# TODO: Support for Arch, Gentoo, Debian, Slackware, CentOS
-	unset FALLBACK # Will contain a fallback (similar) distro if we can't detect
-                 # the real deal
 	unset DISTRO # Will contain the precise distribution we're using
+	FALLBACK=kali
 
-	if [ -f /etc/os-release ]; then
+	if [ -f /etc/lsb-release ]; then
+		FALLBACK=ubuntu-14.04
+		type=`grep ^DISTRIB_ID= /etc/lsb-release | awk -F= {print'$2'} | sed -e 's/"//g'`
+		version=`grep ^DISTRIB_RELEASE= /etc/lsb-release | awk -F= {print'$2'} | sed -e 's/"//g'`
+		if [ ! -z "$type" ]; then
+			if [ ! -z "$version" ]; then
+				DISTRO=`toLower "${type}-$version"`
+			else
+				DISTRO=`toLower "${type}"`
+			fi
+		fi
+	elif [ -f /etc/os-release ]; then
 		FALLBACK=kali
 		type=`grep ^ID= /etc/os-release | awk -F= {print'$2'}`
 		version=`grep ^VERSION_ID= /etc/os-release | awk -F= {print'$2'} | sed -e 's/"//g'` 
-
-		if [ ! -z $type ] && [ ! -z $version ]; then
-			DISTRO="${type}-${version}"
+		if [ ! -z "$type" ]; then
+			if [ ! -z "$version" ]; then
+				DISTRO="${type}-$version"
+			else
+				DISTRO="${type}"
+			fi
 		fi
 
 	elif [ -f /etc/debian_version ]; then
 		FALLBACK=kali
 		if grep "Kali Linux 1" /etc/debian_version >/dev/null; then
 			DISTRO="kali"
-
 		elif [ -d /pentest/tunneling/pwnat ]; then
 			# Could do with a better way to detect this....
 			DISTRO="backtrack"
+		else
+			DISTRO="debian"
 		fi
 	fi
+
+}
+
+function toLower {
+	echo $1 | perl -e 'while (my $line=<STDIN>){ print lc($line);}'
 }
 
 function isKali {

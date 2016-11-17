@@ -33,7 +33,7 @@ sub new {
 	my $pkg=shift();
 	my %engine;
 	$engine{'MainScan'}=shift();
-	my (@foundModules,@loadedModules,@loadedObjects,@failedModules,@watchFiles,@Queue,@costs,@threads,@DispatchedModules,@DispatchedQueue);
+	my (@foundModules,@loadedModules,@loadedObjects,@failedModules,@watchFiles,@Queue,@costs,@threads,@DispatchedModules,@DispatchedQueue,@singleScanned);
 	$engine{'Budget'}=shift();
 	$engine{'ModuleDir'}=$engine{'MainScan'}->Config->GetVal('ModulesDirectory');
 	$engine{'LimitGsms'}=0;
@@ -50,6 +50,7 @@ sub new {
 	$engine{'WatchFiles'}{'List'}=\@watchFiles;
 	$engine{'Queue'}=\@Queue;
 	$engine{'Dispatched'}=\@DispatchedQueue;
+	$engine{'singleScanned'}=\@singleScanned;
 	my $self=\%engine;
 	bless $self, $pkg;	
 
@@ -167,6 +168,17 @@ sub Assign {
 	return $thread;
 }
 
+sub singleScanned {
+	my $self=shift();
+	my $item=shift();
+	for my $ss (@{$$self{'singleScanned'}}){
+		if ($ss eq $item){
+			return 1;
+		}
+	}
+	return 0;
+}
+
 sub QueueTargets {
 	my $self=shift(); my $junk;
 	for my $file (@{$$self{'WatchFiles'}{'List'}}){
@@ -180,14 +192,20 @@ sub QueueTargets {
 			my $basename = substr($file,$index,(length($file)-$index));
 			for my $target ($$self{'MainScan'}->GetStatKeys($file)){
 				for my $module (@{$$self{'WatchFiles'}{'Watching'}{$file}}){
+					my $item="$module:$basename:$target";
 					if ($self->Module($module)->SingleScan){
 						($target,$junk)=split (":", $target);
+						$item="$module:$basename:$target";
+						$$self{'MainScan'}->Log->Debug("QueueTargets: OnePerHost Item $item") if ($$self{'MainScan'}->Debug>1);
+						next if ($self->singleScanned("$module:$target"));
 					}
-					my $item="$module:$basename:$target";
 					$$self{'MainScan'}->Log->Debug("QueueTargets: Checking if we can add $item") if ($$self{'MainScan'}->Debug>1);
 					if ($self->FreeToQueue($item)){
 						$$self{'MainScan'}->Log->Debug("QueueTargets: Queuing $item") if ($$self{'MainScan'}->Debug>1);
 						push @{$$self{'Queue'}}, $item;
+						if ($self->Module($module)->SingleScan){
+							push @{$$self{'singleScanned'}}, "$module:$target";
+						}
 					}
 				}
 			}
@@ -198,15 +216,18 @@ sub QueueTargets {
 sub FreeToQueue {
 	my $self=shift();
 	my $target=shift();
+	$$self{'MainScan'}->Log->Debug("FreeToQueue: Checking $target") if ($$self{'MainScan'}->Debug>1);
 	for my $item (@{$$self{'Queue'}}){
+		$$self{'MainScan'}->Log->Debug("FreeToQueue: Checking $item ($target)") if ($$self{'MainScan'}->Debug>1);
 		if ($target eq $item){
-			$$self{'MainScan'}->Log->Debug("FreeToQueue: $item already Queued") if ($$self{'MainScan'}->Debug>2);
+			$$self{'MainScan'}->Log->Debug("FreeToQueue: NO: $item already Queued") if ($$self{'MainScan'}->Debug>2);
 			return 0;
 		}
 	}
 	for my $item (@{$$self{'Dispatched'}}){
+		$$self{'MainScan'}->Log->Debug("FreeToQueue: Checking $item ($target)") if ($$self{'MainScan'}->Debug>1);
 		if ($target eq $item){
-			$$self{'MainScan'}->Log->Debug("FreeToQueue: $item already Dispatched") if ($$self{'MainScan'}->Debug>2);
+			$$self{'MainScan'}->Log->Debug("FreeToQueue: NO: $item already Dispatched") if ($$self{'MainScan'}->Debug>2);
 			return 0;
 		}
 	}

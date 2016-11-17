@@ -31,7 +31,7 @@ libdbd-sybase-perl
 libx11-protocol-perl
 libopenvasnasl2
 libopenvasnasl2-dev
-libcurl-dev
+libcurl4-openssl-dev
 
 snmp
 sslscan
@@ -40,9 +40,3 @@ ruby
 ldap-utils
 medusa
 ntpdate
-
-
-
-
-
-
