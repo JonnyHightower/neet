@@ -195,7 +195,7 @@ echo "Neet $VERSION has been installed."
 
 MISSING=""
 WARN=0
-for component in resources deps shell upload bundled; do
+for component in modules resources deps shell upload bundled; do
 	if ! grep "neet-${component}=" ${CONFDIR}/versions >/dev/null 2>&1; then
 		WARN=1
 		MISSING="$MISSING $component"
