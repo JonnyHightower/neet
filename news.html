@@ -36,6 +36,32 @@
     <div class="container">
       <section id="main_content">
 
+<h2>17 November 2016</h2>
+Yes, it's been a while! I've done a little bit more development in the last couple of days.
+
+<p><b>Further Distro Support</b><br>
+Ubuntu 16.04 is now supported, as are Linux Mint 17(.x) releases. As yet, Mint 18 is not truly supported as the libopenvasnasl packages have been removed from the Mint 18 repos, and neet uses this to run some NASL scripts. So, on Mint 18, you'll be missing some patch checks.
+</p>
+<p><b>Changes / Added features</b><br>
+<ul>
+<li><b>SSH:</b> This now uses Medusa instead of Patator.py for account brute-forcing. It will also now brute-force Windows machines too.
+<li><b>HTTP/S:</b> Added Dirb to the HTTP checks. You can specify which wordlists you want dirb to use by adding the line:<br>
+<b>module.http.dirb.wordlist=NEET/common.txt</b><br>
+to your neet config file. The string NEET will automatically be replaced by the path to the dirb resource files in the neet installation. You can repeat this config option multiple times to get dirb to run multiple files (sequentially, in the order they appear in the config file). By default, the files are in <i>/opt/neet/resources/dirb/</i>. You can of course specify files from somewhere else completely: <b>module.http.dirb.wordlist=/home/user/files/lists/mylist.txt</b><br>
+<li><b>TLS/SSL Services:</b> testssl.sh will be run against these services.
+</ul>
+</p>
+<p><b>Outstanding Issues</b><br>
+<ul>
+<li><b>Exploitation:</b> Rapid7's removal of the msfcli utility means that Neet's exploitation capability is drastically reduced until I port the exploitation commands to msfconsole. I'll try and do this in the run up to Christmas (2016!).
+<li><b>Samba:</b> Some distributions (notably Linux Mint) have an issue with their Samba clients which means that Neet can't determine the OS of the remote host. If you're affected, this can be fixed by adding the following line to your <i>/etc/samba/smb.conf</i> file:<br>
+<i>client max protocol = SMB3</i>
+</ul>
+</p>
+
+
+
+
 <h2>22 September 2014</h2>
 
 <b>Bug fixes</b>
