@@ -21,7 +21,7 @@
 #    Contact: jonnyhightower [at] funkygeek.com
 #
 ##########################################################################
-
+push @INC, ".";
 use strict;
 use checkdeps;
 

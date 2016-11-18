@@ -160,7 +160,7 @@ sub new {
 		if ($line =~ /^\w+\d+[\.\d+]{0,}\s+Link[\s\S]+/){
 			$if=$line; $if =~ s/^(\w+\d+[\.\d+]{0,})\s+Link[\s\S]+/$1/;
 		}
-		if ($line =~ /inet addr/){
+		if ($line =~ /inet ad/){
 			my ($ip,$mask,$junk);
 			my @ifconfig=split ":", $line;
 			next if $#ifconfig !=3;
