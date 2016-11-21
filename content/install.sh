@@ -3,7 +3,7 @@
 ##########################################################################
 #
 #    Neet: Network discovery, enumeration and security assessment tool
-#    Copyright (C) 2008-2014 Jonathan Roach
+#    Copyright (C) 2008-2016 Jonathan Roach
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -47,7 +47,7 @@ echo "Neet Discovery Engine v${VERSION} - Installing..."
 echo " - (c) Jonathan Roach 2008-2014"
 echo
 cat << EOF
-  Copyright (C) 2008-2014 Jonathan Roach
+  Copyright (C) 2008-2016 Jonathan Roach
   This program comes with ABSOLUTELY NO WARRANTY
   This is free software, and you are welcome to redistribute it
   under certain conditions; view the accompanying LICENSE for details.

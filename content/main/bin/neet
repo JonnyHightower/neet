@@ -3,7 +3,7 @@
 ##########################################################################
 #
 #    Neet: Network discovery, enumeration and security assessment tool
-#    Copyright (C) 2008-2014 Jonathan Roach
+#    Copyright (C) 2008-2016 Jonathan Roach
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -149,7 +149,7 @@ if (-f "logs/" . $Config->GetVal("LogFile")){
 $Log->OpenLog;
 #system("clear");
 $Log->Info ("This is neet $VERSION - initialising...\n");
-print "\n\tCopyright (C) 2008-2014 Jonathan Roach\n" .
+print "\n\tCopyright (C) 2008-2016 Jonathan Roach\n" .
       "\tThis program comes with ABSOLUTELY NO WARRANTY\n" .
       "\tThis is free software, and you are welcome to redistribute it\n" .
       "\tunder certain conditions; view the accompanying LICENSE for details.\n\n";
