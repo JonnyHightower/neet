@@ -154,6 +154,9 @@ sub new {
 	$scan{'LimitGSMs'}=0;
 	$scan{'DisabledGSM'}=0;
 
+	# Get list of VPN interfaces
+	@{$scan{'VPNInterfaces'}} = split " ", $Config->GetVal("Interface.VPN");
+
 	# Record interface information
 	my $if;
 	for my $line (`/sbin/ifconfig -a`){	
@@ -168,7 +171,14 @@ sub new {
 			$mask = $ifconfig[3]; chomp ($mask);
 			$interfaces{$if}{'address'}=$ip;
 			$interfaces{$if}{'mask'}=$mask;
+			$interfaces{$if}{'vpn'}=0;
 			$interfaces{$if}{'object'}=NetAddr::IP->new($ip,$mask);
+			for my $interface (@{$scan{'VPNInterfaces'}}){
+				if ($if =~ /^$interface\d+/){
+					$interfaces{$if}{'vpn'}=1;
+					last;
+				}
+			}
 			push @InterfaceList, $if;
 			push @OurAddressRanges, $ip;
 		}
@@ -180,8 +190,9 @@ sub new {
 		exit 255;
 	}
 
-	# List VPN Interfaces
-	@{$scan{'VPNInterfaces'}} = split " ", $Config->GetVal("Interface.VPN");
+	# In case we have more than one 'default' route (often the case with VPNs)
+	# Store each default
+	my $defaultrouteid=0;
 
 	# Populate routing hash
 	for my $route (`/sbin/route -n`){
@@ -194,22 +205,85 @@ sub new {
 			$routes{$scan{'NumRoutes'}}{'Mask'}=$mask;
 			$routes{$scan{'NumRoutes'}}{'Metric'}=$metric;
 			$routes{$scan{'NumRoutes'}}{'Interface'}=$interface;
+			$routes{$scan{'NumRoutes'}}{'VPN'}=$scan{'Interfaces'}{$interface}{'vpn'};
+
 			# For route calculations later
 			$routes{$scan{'NumRoutes'}}{'NetSpec'}=NetAddr::IP->new($dest,$mask);
 			$routes{$scan{'NumRoutes'}}{'NumHosts'}=$routes{$scan{'NumRoutes'}}{'NetSpec'}->num();
-			#print "$scan{'NumRoutes'} D $dest G $gw M $mask m $metric $interface [ $routes{$scan{'NumRoutes'}}{'NumHosts'} ]\n";
+			#print "Route $scan{'NumRoutes'} D $dest G $gw M $mask m $metric $interface [ $routes{$scan{'NumRoutes'}}{'NumHosts'} ]\n";
 			$scan{'NumRoutes'}++;
 		} else {
+			# What if there's more than one "default"?
 			my ($dest,$gw,$mask,$flags,$metric,$ref,$use,$interface)=split " ", $route;
-			$routes{'Default'}{'Dest'}=$dest;
-			$routes{'Default'}{'GW'}=$gw;
-			$routes{'Default'}{'Mask'}=$mask;
-			$routes{'Default'}{'Metric'}=$metric;
-			$routes{'Default'}{'Interface'}=$interface;
+			$routes{'Default'}{$defaultrouteid}{'Dest'}=$dest;
+			$routes{'Default'}{$defaultrouteid}{'GW'}=$gw;
+			$routes{'Default'}{$defaultrouteid}{'Mask'}=$mask;
+			$routes{'Default'}{$defaultrouteid}{'Metric'}=$metric;
+			$routes{'Default'}{$defaultrouteid}{'Interface'}=$interface;
+			$routes{'Default'}{$defaultrouteid}{'VPN'}=$scan{'Interfaces'}{$interface}{'vpn'};
+
 			# For route calculations later
 			my $NetSpec=NetAddr::IP->new($dest,$mask);
-			$routes{'Default'}{'NetSpec'}=$NetSpec;
-			#print "$scan{'NumRoutes'} D $dest G $gw M $mask m $metric $interface\n";
+			$routes{'Default'}{$defaultrouteid}{'NetSpec'}=$NetSpec;
+			$routes{'Defaults'}=$defaultrouteid;
+			#print "Default [$defaultrouteid]: $scan{'NumRoutes'} D $dest G $gw M $mask m $metric $interface\n";
+			$defaultrouteid++;
+		}
+	}
+
+	sub _pbr_interface {
+		my $data=shift();
+		$data =~ m/^[\S\s]+ dev (\S{4,10}) [\S\s]+/;
+		return $1;
+	}
+
+	# Policy-based routing
+	my ($PBR,@tables);
+	if (open($PBR,"/etc/iproute2/rt_tables")){
+		# Get the non-standard routes
+		until (eof $PBR){
+			my $rt=readline(*$PBR);
+			next if ($rt =~ /^\s{0,}#/) || ($rt !~ /\S/);
+			if (($rt =~ /\slocal\s/) || ($rt =~ /\smain\s/) || ($rt =~ /\sdefault\s/) || ($rt =~ /\sunspec\s/)){
+				next;
+			}
+			chomp $rt;
+			my ($id,$table)=split /\s+/,$rt;
+			push @tables, $table;
+		}
+		close $PBR;
+		for my $table (@tables){
+			for my $route (`ip route show table $table`){
+				my ($interface, $dest, $gw, $mask);
+				my $local=0;
+				# Destination
+				$route =~ m/^(\S+) [\S\s]+/;
+				$dest=$1;
+				# Interface
+				$route =~ m/^[\S\s]+ dev (\S{4,10}) [\S\s]+/;
+				$interface=$1;
+				# Gateway
+				if ($route =~ / via /){
+					$route =~ m/^[\S\s]+ via (\S{7,15}) [\S\s]+/;
+					$gw=$1;
+				} else {
+					$gw="0.0.0.0";
+					if ($route =~ /scope link/){
+						$local=1;
+					}
+				}
+
+				$routes{$scan{'NumRoutes'}}{'Dest'}=$dest;
+				$routes{$scan{'NumRoutes'}}{'Interface'}=$interface;
+				$routes{$scan{'NumRoutes'}}{'VPN'}=$scan{'Interfaces'}{$interface}{'vpn'};
+				$routes{$scan{'NumRoutes'}}{'GW'}=$gw;
+				$routes{$scan{'NumRoutes'}}{'NetSpec'}=NetAddr::IP->new($dest);
+				$routes{$scan{'NumRoutes'}}{'NumHosts'}=$routes{$scan{'NumRoutes'}}{'NetSpec'}->num();
+
+				#print "Route $scan{'NumRoutes'} D $dest G $gw $interface]\n";
+
+				$scan{'NumRoutes'}++;
+			}
 		}
 	}
 
@@ -380,13 +454,6 @@ sub isInterface {
 	my $interface=shift();
 	return 1 if (exists ($$self{'Interfaces'}{$interface}{'address'}));
 	return 0;
-	#return 0 if (!$interface || $interface =~ /\W/ || $interface !~ /\d/);
-	#my $rc=system("/sbin/ifconfig $interface >/dev/null 2>&1");
-	#$rc = $rc>>8;
-	#if ($rc == 0){
-	#	return 1;
-	#}
-	#return 0;
 }
 
 sub localArpScan {
@@ -427,10 +494,6 @@ sub SetHostDown {
 		$self->DelStatKey("$$self{'ResultsDirectory'}/liveHosts.txt",$target);
 		return 0;
 	}
-	#my $HostStatFile=$self->HostStatusFile;
-	#if ($self->SetStatValue("$HostStatFile",$target,"down")){
-	#	return 1;
-	#}
 	return 1;
 }
 
@@ -440,11 +503,6 @@ sub SetHostNotDown {
 	$target = $self->Target if (!defined($target));
 	unlink "$$self{'ControlDirectory'}/down/$target";
 	return 0;
-	#my $HostStatFile=$self->HostStatusFile;
-	#if ($self->DelStatKey("$HostStatFile",$target,"down")){
-	#	return 1;
-	#}
-	#return 0;
 }
 
 sub IsHostUp {
@@ -467,13 +525,6 @@ sub IsHostDown {
 		return 1;
 	}
 	return 0;
-	#my $HostStatFile=$self->HostStatusFile;
-	#my $status=$self->GetStatValue("$HostStatFile",$target);
-	#if ($status && "$status" eq "down"){
-	#	return 1;
-	#} else {
-	#	return 0;
-	#}
 }
 
 sub IsHostCancelled {
@@ -483,13 +534,6 @@ sub IsHostCancelled {
 	if (-f "$$self{'ResultsDirectory'}/${target}/.cancelled"){
 		return 1;
 	}
-	#my $HostStatFile=$self->HostStatusFile;
-	#my $status=$self->GetStatValue("$HostStatFile",$target);
-	#if (defined($status) && (("$status" eq "cancel") || ("$status" eq "cancelall"))){
-	#	return 1;
-	#} else {
-	#	return 0;
-	#}
 	return 0;
 }
 
@@ -852,28 +896,39 @@ sub GetNextAddress {
 	}
 
 	if ($chosen){
-		# We chose at least one route
+		# We chose a favourite route
+		#print "Chose route $favourite\n";
 		$$self{'Interface'}=$$self{'Routes'}{$favourite}{'Interface'};
+		$$self{'VPN'}=$$self{'Routes'}{$favourite}{'VPN'};
 	} else {
 		# Failed to pick a route from the ones above. Use the default route.
-		$$self{'Interface'}=$$self{'Routes'}{'Default'}{'Interface'};
+		if ($$self{'Routes'}{'Defaults'} > 0){
+			#print "Multiple default routes...\n";
+			# There's more than one default route. Likely there's a VPN up. Pick the
+			# VPN interface if so.
+			for (my $a=0; $a<$$self{'Routes'}{'Defaults'}; $a++){
+				if ($$self{'Routes'}{'Default'}{$a}{'VPN'}){
+					$$self{'Interface'}=$$self{'Routes'}{'Default'}{$a}{'Interface'};
+					$$self{'VPN'}=$$self{'Routes'}{'Default'}{$a}{'VPN'};
+				}
+			}
+
+		} else {
+			# Just one default route. Use it.
+			$$self{'Interface'}=$$self{'Routes'}{'Default'}{'0'}{'Interface'};
+			$$self{'VPN'}=$$self{'Routes'}{'Default'}{'0'}{'VPN'};
+			#print "Just one default route: $$self{'Interface'}\n";
+		}
+
 		if (!defined($$self{'Interface'})){
 			$$self{'Log'}->Warn ("** ERROR: Can't scan $ip - no routes available.\n");
 			return 0;
 		}
 	}
 
-	# Determine if the target is on a local interface or not
+	# Determine if the target is on a local interface range or not
 	if ($$self{'Interfaces'}{$$self{'Interface'}}{'object'}->contains($HostObj)){
 		$$self{'Local'}=1;
-	}
-
-	# Now see if our chosen route is over a VPN - set a flag if it is
-	for my $if (@{$$self{'VPNInterfaces'}}){
-		if ($$self{'Interface'} =~ /^$if\d+/){
-			$$self{'VPN'}=1;
-			last;
-		}
 	}
 
 	# Store the locality information for use by the modules
@@ -881,6 +936,7 @@ sub GetNextAddress {
 	$$self{'Locality'}{$ip}{'vpn'}=0;
 	$$self{'Locality'}{$ip}{'locality'}="remote";
 	$$self{'Locality'}{$ip}{'locality'}="internet" if (($$self{'Internet'}) && (!$$self{'VPN'}) && (!$$self{'Local'}));
+
 	if ($$self{'VPN'}){
 		$$self{'Locality'}{$ip}{'locality'}="vpn";
 		$$self{'Locality'}{$ip}{'vpn'}=1;
@@ -921,22 +977,30 @@ sub IsHostLocal {
 		if ($chosen){
 			# We chose at least one route
 			$$self{'Interface'}=$$self{'Routes'}{$favourite}{'Interface'};
+			$$self{'VPN'}=$$self{'Routes'}{$favourite}{'VPN'};
 		} else {
-			# Failed to pick a route from the ones above. Use the default route.
-			$$self{'Interface'}=$$self{'Routes'}{'Default'}{'Interface'};
+			if ($$self{'Routes'}{'Defaults'} > 0){
+				#print "Multiple default routes...\n";
+				# There's more than one default route. Likely there's a VPN up. Pick the
+				# VPN interface if so
+				for (my $a=0; $a<$$self{'Routes'}{'Defaults'}; $a++){
+					if ($$self{'Routes'}{'Default'}{$a}{'VPN'}){
+						$$self{'Interface'}=$$self{'Routes'}{'Default'}{$a}{'Interface'};
+						$$self{'VPN'}=$$self{'Routes'}{'Default'}{$a}{'VPN'};
+					}
+				}
+
+			} else {
+				# Just one default route. Use it.
+				$$self{'Interface'}=$$self{'Routes'}{'Default'}{'0'}{'Interface'};
+				$$self{'VPN'}=$$self{'Routes'}{'Default'}{'0'}{'VPN'};
+				#print "Just one default route: $$self{'Interface'}\n";
+			}
 		}
 
 		# Determine if the target is on a local interface or not
 		if ($$self{'Interfaces'}{$$self{'Interface'}}{'object'}->contains($HostObj)){
 			$$self{'Local'}=1;
-		}
-
-		# Now see if our chosen route is over a VPN - set a flag if it is
-		for my $if (@{$$self{'VPNInterfaces'}}){
-			if ($$self{'Interface'} =~ /^$if\d+/){
-				$$self{'VPN'}=1;
-				last;
-			}
 		}
 
 		# Store the locality information for use by the modules
