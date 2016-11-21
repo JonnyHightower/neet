@@ -42,7 +42,7 @@ function Install {
 
 	if [ -x pre-install.sh ]; then
 		echo -n "Installing ${name} ...: "
-		./pre-install.sh "${PREFIX}" "${pkg}"
+		./pre-install.sh "${PREFIX}" "${pkg}" "${BUILD}/${name}-install.log"
 		if [ $? -eq 0 ]; then
 			echo "${name} installed successfully"
 			cd "${BUILD}" && rm -r "${pkg}"
