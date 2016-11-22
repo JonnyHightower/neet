@@ -158,30 +158,20 @@ sub new {
 	@{$scan{'VPNInterfaces'}} = split " ", $Config->GetVal("Interface.VPN");
 
 	# Record interface information
-	my $if;
-	for my $line (`/sbin/ifconfig -a`){	
-		if ($line =~ /^\w+\d+[\.\d+]{0,}\s+Link[\s\S]+/){
-			$if=$line; $if =~ s/^(\w+\d+[\.\d+]{0,})\s+Link[\s\S]+/$1/;
-		}
-		if ($line =~ /inet ad/){
-			my ($ip,$mask,$junk);
-			my @ifconfig=split ":", $line;
-			next if $#ifconfig !=3;
-			($ip,$junk) = split /\s/, $ifconfig[1];
-			$mask = $ifconfig[3]; chomp ($mask);
-			$interfaces{$if}{'address'}=$ip;
-			$interfaces{$if}{'mask'}=$mask;
-			$interfaces{$if}{'vpn'}=0;
-			$interfaces{$if}{'object'}=NetAddr::IP->new($ip,$mask);
-			for my $interface (@{$scan{'VPNInterfaces'}}){
-				if ($if =~ /^$interface\d+/){
-					$interfaces{$if}{'vpn'}=1;
-					last;
-				}
+	my @ifdata=`/sbin/ip addr show`;
+	for my $if (interfaceInfo("list",@ifdata)){
+		next if ("$if" eq "lo");
+		push @InterfaceList, $if;
+		my $bcast;
+		($interfaces{$if}{'address'},$interfaces{$if}{'mask'},$bcast,$interfaces{$if}{'mac'},$interfaces{$if}{'object'})=interfaceInfo($if,@ifdata);
+		$interfaces{$if}{'vpn'}=0;
+		for my $interface (@{$scan{'VPNInterfaces'}}){
+			if ($if =~ /^$interface\d+/){
+				$interfaces{$if}{'vpn'}=1;
+				last;
 			}
-			push @InterfaceList, $if;
-			push @OurAddressRanges, $ip;
 		}
+		push @OurAddressRanges, $interfaces{$if}{'address'};
 	}
 
 	# Check that we actually have a configured network interface
@@ -291,6 +281,60 @@ sub new {
 	bless $self, $pkg;
 	return $self;
 }
+
+sub interfaceInfo {
+	my $interface=shift();
+	my @ifdata=@_;
+	return undef if ($#ifdata < 6);
+
+	if ("$interface" eq "list"){
+		my @interfaces;
+		for my $line (@ifdata){
+			next if ($line !~ /^\d+:\s/);
+			next if ($line =~ /state DOWN/);
+			$line =~ m/\d:\s(\S+):\s+\<*/;
+			push @interfaces, $1;
+		}
+		return @interfaces;
+	}
+
+	my $thisInterface=0;
+	my ($address,$mask,$broadcast,$mac,$object);
+
+	for my $line (@ifdata){
+		if ($line =~ /\s$interface:\s/){
+			$thisInterface=1;
+			return undef if ($line =~ /state DOWN/);
+			next;
+		}
+		if ($thisInterface){
+			if ($line =~ /\sinet\s/){
+				$line =~ m/^\s+inet\s(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2})\s+brd\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s[\S\s]+$/;
+				$address=$1;
+				$broadcast=$2;
+				next;
+			}
+			if ($line =~ /\slink\/ether\s/){
+				$line =~ m/^\s+link\/ether\s(\S+)\s+brd\s+[\S\s]+/;
+				$mac=$1;
+				next;
+			}
+			if ($line =~ /^\d:/){
+				$thisInterface=0;
+				last;
+			}
+		}
+	}
+
+	if ($address){
+		$object=NetAddr::IP->new($address);
+		$mask=$object->mask();
+		$address=$object->addr();
+	}
+
+	return ($address,$mask,$broadcast,$mac,$object);
+}
+
 
 # Directory and status control
 #------------------

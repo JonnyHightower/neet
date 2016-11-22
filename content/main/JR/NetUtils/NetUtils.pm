@@ -83,37 +83,81 @@ sub isInterface {
 
 sub InterfaceIP {
 	my $Interface=shift();
-	my $IP;
 	return 0 if (!$Interface);
-	for my $line (`ifconfig $Interface`){
-		if ($line =~ /inet/){
-			my ($junk,$ip,$junk2)=split ":", $line;
-			($ip,$junk)=split "\\s", $ip;
-			if (isIPSpec($ip)){
-				$IP=$ip;
-				last;
-			}
-		}
-	}
-	return $IP;
+	return 0 if (!isInterface($Interface));
+	my @ifconfig=`/sbin/ip addr show`;
+	my ($address,$mask,$broadcast,$mac,$object)=interfaceInfo ($Interface,@ifconfig);
+	return $address;
 }
 
 sub interfaceIP {
 	my $interface=shift();
 	return undef if (!isInterface($interface));
-	my $ipconfig=`/sbin/ifconfig $interface | grep "inet addr"`;
-	my $ipaddress=$ipconfig; $ipaddress=~s/^\s+inet addr:(\d+\.\d+\.\d+\.\d+)[\s\S]+$/$1/;
-	return $ipaddress;
+	my @ifconfig=`/sbin/ip addr show`;
+	my ($address,$mask,$broadcast,$mac,$object)=interfaceInfo ($interface,@ifconfig);
+	return $address;
 }
 
 sub interfaceMask {
 	my $interface=shift();
 	return undef if (!isInterface($interface));
-	my $ipconfig=`/sbin/ifconfig $interface | grep "inet addr"`;
-	my $netmask=$ipconfig; $netmask=~s/^[\s\S]+Mask:(\d+\.\d+\.\d+\.\d+)[\s\S]+$/$1/;
-	return $netmask;
+	my @ifconfig=`/sbin/ip addr show`;
+	my ($address,$mask,$broadcast,$mac,$object)=interfaceInfo ($interface,@ifconfig);
+	return $mask;
 }
 
+sub interfaceInfo {
+	my $interface=shift();
+	my @ifdata=@_;
+	return undef if ($#ifdata < 6);
+
+	if ("$interface" eq "list"){
+		my @interfaces;
+		for my $line (@ifdata){
+			next if ($line !~ /^\d+:\s/);
+			next if ($line =~ /state DOWN/);
+			$line =~ m/\d:\s(\S+):\s+\<*/;
+			push @interfaces, $1;
+		}
+		return @interfaces;
+	}
+
+	my $thisInterface=0;
+	my ($address,$mask,$broadcast,$mac,$object);
+
+	for my $line (@ifdata){
+		if ($line =~ /\s$interface:\s/){
+			$thisInterface=1;
+			return undef if ($line =~ /state DOWN/);
+			next;
+		}
+		if ($thisInterface){
+			if ($line =~ /\sinet\s/){
+				$line =~ m/^\s+inet\s(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2})\s+brd\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s[\S\s]+$/;
+				$address=$1;
+				$broadcast=$2;
+				next;
+			}
+			if ($line =~ /\slink\/ether\s/){
+				$line =~ m/^\s+link\/ether\s(\S+)\s+brd\s+[\S\s]+/;
+				$mac=$1;
+				next;
+			}
+			if ($line =~ /^\d:/){
+				$thisInterface=0;
+				last;
+			}
+		}
+	}
+
+	if ($address){
+		$object=NetAddr::IP->new($address);
+		$mask=$object->mask();
+		$address=$object->addr();
+	}
+
+	return ($address,$mask,$broadcast,$mac,$object);
+}
 
 
 1;

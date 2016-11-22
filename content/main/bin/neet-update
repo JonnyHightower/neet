@@ -32,7 +32,7 @@ export PREFIX=/opt
 export NEET="${PREFIX}/neet"
 export CONFDIR="${NEET}/etc"
 export CONFIG="${CONFDIR}/neet.conf"
-export INST=${PWD}
+export INST="$PWD"
 
 if [ ! -f "${NEET}/core/installsupport" ]; then
 	echo "Couldn't locate the install support file. Exiting."

@@ -61,7 +61,7 @@ Some of the main features include:
 
 ** INSTALLATION **
 
-Owing to the number of open-source tools orchestrated by Neet, the installation process will check the target system to ensure that it has the tools required. For the Ubuntu and Kali Linux distributions, the required prerequisites will be installed using APT prior to the main installation process.
+Owing to the number of open-source tools orchestrated by Neet, the installation process will check the target system to ensure that it has the tools required. For the Debian, Ubuntu, Kali and Mint Linux distributions, the required prerequisites will be installed using APT prior to the main installation process.
 
 See the INSTALL file for installation instructions.
 

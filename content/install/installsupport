@@ -23,6 +23,7 @@
 ##########################################################################
 
 export BUILD="${NEET}/core/update/build"
+export SRC="${PWD}/content"
 
 function Install {
 	local pkg=$1
@@ -30,7 +31,7 @@ function Install {
 	local config="$3"
 	local configured
 	local makefile
-	SRC="${PWD}/content"
+
 	cd "${BUILD}"
 	#echo "**************************************"
 	tar -xf "${SRC}/${pkg}.tar"
@@ -148,7 +149,6 @@ function Install {
 function PkgInstall {
 	local pkg=$1
 	local name=$2
-	SRC="${PWD}/content"
 	cd "${BUILD}"
 	tar -xf "${SRC}/${pkg}.tar" > "${BUILD}/${name}-install.log" 2>&1
 	if [ ! -d ${pkg} ]; then

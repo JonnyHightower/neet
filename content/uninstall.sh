@@ -32,7 +32,7 @@ export PREFIX
 export NEET="${PREFIX}/neet"
 export CONFDIR="${NEET}/etc"
 export CONFIG="${CONFDIR}/neet.conf"
-export INST=${PWD}
+export INST="$PWD"
 
 INSTALLED=1
 DOUNINSTALL=1

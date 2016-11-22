@@ -30,6 +30,9 @@ use Net::ARP;
 use NetPacket::Ethernet;
 use NetPacket::IP;
 
+unshift @INC, "/opt/neet/core";
+require JR::NetUtils::NetUtils;
+
 # The purpose of this script is to test whether or not an IP interface is configured to forward IP packets. This is useful in identifying potential routes out of a network.
 # We do this by sending an IP packet to the interface under test, destined for our IP address, but the target MAC address. The SRC IP and MAC addresses should be unimportant
 # as we aren't using ARP packets and no cache poisoning should take place.
@@ -65,15 +68,10 @@ my %data;
 my $timeout=3; # Seconds - for waiting for ARP reply, and for waiting for the IP packet reply
 my $payload="JR's Interface Routing Test!!";
 
-for my $interface (`/sbin/ifconfig -a | grep Ethernet`){
-	chomp $interface;
-	my $name=$interface; $name =~ s/^(\S+)\s[\s\S]+/$1/;
-	my $mac=$interface; $mac =~ s/^[\S\s]+HWaddr\s(\w\w:\w\w:\w\w:\w\w:\w\w:\w\w)\s+/$1/; $mac=lc($mac);
-	my $ipconfig=`/sbin/ifconfig $name | grep inet`;
-	my $ip=$ipconfig; $ip =~ s/[\s\S]+addr:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})[\s\S]+/$1/;
-	next if (!$ip);
-	my $mask=$ipconfig; $mask =~ s/[\s\S]+Mask:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})[\s\S]+/$1/;
-	my $bcast=$ipconfig; $bcast =~ s/[\s\S]+Bcast:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})[\s\S]+/$1/;
+my @ifconfig=`/sbin/ip addr show`;
+for my $name (interfaceInfo ("list",@ifconfig)){
+	next if ("$name" eq "lo");
+	my ($ip,$mask,$bcast,$mac,$object)=interfaceInfo($name,@ifconfig);
 	$data{'int'}{$name}{'mac'}=$mac;
 	$data{'int'}{$name}{'ip'}=$ip;
 	$data{'int'}{$name}{'mask'}=$mask;

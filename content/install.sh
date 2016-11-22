@@ -57,7 +57,7 @@ export UPDATEONLY=0
 export NEET="${PREFIX}/neet"
 export CONFDIR="${NEET}/etc"
 export CONFIG="${CONFDIR}/neet.conf"
-export INST=${PWD}
+export INST="$PWD"
 
 # Import some functions
 . ./install/installsupport
