@@ -1,6 +1,8 @@
 cmake
 flex
 bison
+make
+autoconf
 
 libnet-arp-perl
 libnet-ip-perl
@@ -12,6 +14,13 @@ libxml-twig-perl
 
 smbclient
 nfs-common
+
+libpopt0
+libpopt-dev
+libssh-dev
+libhiredis-dev
+libgcrypt20-dev
+
 
 libssl-dev
 libglib2.0-dev
@@ -32,6 +41,9 @@ libx11-protocol-perl
 libopenvasnasl2
 libopenvasnasl2-dev
 libcurl4-openssl-dev
+
+tcptraceroute
+tcpdump
 
 snmp
 sslscan

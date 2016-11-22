@@ -1,6 +1,8 @@
 cmake
 flex
 bison
+make
+autoconf
 
 libnet-arp-perl
 libnet-ip-perl
@@ -13,10 +15,18 @@ libxml-twig-perl
 smbclient
 nfs-common
 
+python-dev
+libpopt0
+libpopt-dev
+libssh-dev
+libhiredis-dev
+libgcrypt20-dev
+libcurl3
+libcurl4-openssl-dev
 libssl-dev
 libglib2.0-dev
-libgnutls26
-libgnutls-dev
+libgnutls-deb0-28
+libgnutls28-dev
 libnet1-dev
 libpcap0.8
 libpcap-dev
@@ -29,7 +39,9 @@ libdbi-perl
 libdbd-sqlite3-perl
 libdbd-sybase-perl
 libx11-protocol-perl
-libcurl-dev
+
+tcptraceroute
+tcpdump
 
 snmp
 sslscan
@@ -38,6 +50,7 @@ ruby
 ldap-utils
 medusa
 ntpdate
+
 
 
 

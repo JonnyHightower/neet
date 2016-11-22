@@ -21,9 +21,9 @@
 #    Contact: jonnyhightower [at] funkygeek.com
 #
 ##########################################################################
-push @INC, ".";
 use strict;
-use checkdeps;
+unshift @INC, ('.');
+require checkdeps;
 
 # This script checks the dependencies prior to the installation of neet
 my @locations;
@@ -59,14 +59,14 @@ for my $c (@nonrecs){
 		$message .= "\n $c can be downloaded from the following URI:\n $download\n";
 	}
 	if (!isMissing($c)){
-		errorLog "*-------------------------------------------------------------------------*\n" .
+		errorLog ("*-------------------------------------------------------------------------*\n" .
 			  " Dependency \"$c\" version " . actualVersion($c) . " was found, but it really should be at least\n" .
 				" version " . recommendedVersion($c) . ".\n\n" . $message .
-				"*-------------------------------------------------------------------------*\n\n";
+				"*-------------------------------------------------------------------------*\n\n");
 	} else {
-		errorLog "*-------------------------------------------------------------------------*\n" .
+		errorLog ("*-------------------------------------------------------------------------*\n" .
 			  	" Non-critical dependency \"$c\" could not be found.\n\n" . $message .
-					"*-------------------------------------------------------------------------*\n\n";
+					"*-------------------------------------------------------------------------*\n\n");
 	}
 	$error=1;
 }
@@ -80,14 +80,14 @@ for my $c (@criticals){
 		$message .= "\n $c can be downloaded from the following URI:\n $download\n";
 	}
 	if (!isMissing($c)){
-		errorLog "*!!!!---------------------------------------------------------------!!!!*\n" .
+		errorLog ("*!!!!---------------------------------------------------------------!!!!*\n" .
 			  " Critical dependency: \"$c\", minimum version " . criticalVersion($c) . ", could not be found.\n" .
 				" The most recent version which could be found was version " . actualVersion($c) .  ".\n\n" . $message .
-				"*-------------------------------------------------------------------------*\n";
+				"*-------------------------------------------------------------------------*\n");
 	} else {
-		errorLog "*!!!!---------------------------------------------------------------!!!!*\n\n" .
+		errorLog ("*!!!!---------------------------------------------------------------!!!!*\n\n" .
 			  " Critical missing dependency: \"$c\" could not be found.\n\n" . $message .
-				"*-------------------------------------------------------------------------*\n\n";
+				"*-------------------------------------------------------------------------*\n\n");
 	}
 	$error=2;
 }
@@ -111,15 +111,15 @@ for my $component (listPerlComponents()){
 			if (index($message,"No help text")==1){
 				$message=getMessage($component,"recommended");
 			}
-			errorLog "*!!!!---------------------------------------------------------------!!!!*\n\n" .
+			errorLog ("*!!!!---------------------------------------------------------------!!!!*\n\n" .
 			  " Critical missing PERL dependency: \"$component\" could not be found.\n\n" . $message .
-				"*-------------------------------------------------------------------------*\n\n";
+				"*-------------------------------------------------------------------------*\n\n");
 			$error=2;
 		} else {
 			my $message=getMessage($component,"recommended");
-			errorLog "*-------------------------------------------------------------------------*\n" .
+			errorLog ("*-------------------------------------------------------------------------*\n" .
 							" Non-critical PERL library dependency \"$component\" could not be found.\n\n" . $message .
-							"*-------------------------------------------------------------------------*\n\n";
+							"*-------------------------------------------------------------------------*\n\n");
 			$error=1 if ($error==0);
 		}
 	}

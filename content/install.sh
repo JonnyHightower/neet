@@ -44,7 +44,6 @@ fi
 
 echo
 echo "Neet Discovery Engine v${VERSION} - Installing..."
-echo " - (c) Jonathan Roach 2008-2014"
 echo
 cat << EOF
   Copyright (C) 2008-2016 Jonathan Roach

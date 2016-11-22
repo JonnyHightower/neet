@@ -18,7 +18,7 @@ In summary, Neet is not a point-and-click hacking or vulnerability assessment to
 
 Neet is released under version 3 of the GNU Public License. See the LICENSE file for details.
 
-Copyright 2007-2014 Jonathan Roach
+Copyright 2008-2016 Jonathan Roach
 Email: jonnyhightower [at] funkygeek.com
 
 Some of the main features include:

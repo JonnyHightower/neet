@@ -282,13 +282,19 @@ function apt-get-list {
 	local LIST="$1"
 	ERROR=0
 	for package in `cat "$LIST"`; do
+		if apt-cache policy $package 2>&1 | grep -q Installed:; then
+			continue
+		fi
+		echo " + Installing $package"
 		apt-get -y install $package >/dev/null 2>&1
-		echo -n "."
 		ERR=$?
+		#echo -n "."
 		if [ $ERR -ne 0 ]; then
 			echo
-			echo "  There was a problem installing $package."
+			echo "  ! There was a problem installing $package."
 			ERROR=1
+		else
+			echo "  = OK"
 		fi
 	done
 	echo
@@ -316,9 +322,9 @@ function selectDistro {
 		version=`grep ^VERSION_ID= /etc/os-release | awk -F= {print'$2'} | sed -e 's/"//g'` 
 		if [ ! -z "$type" ]; then
 			if [ ! -z "$version" ]; then
-				DISTRO="${type}-$version"
+				DISTRO=`toLower "${type}-$version"`
 			else
-				DISTRO="${type}"
+				DISTRO=`toLower "${type}"`
 			fi
 		fi
 
