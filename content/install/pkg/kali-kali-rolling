@@ -25,7 +25,7 @@ libcurl3
 libcurl4-openssl-dev
 libssl-dev
 libglib2.0-dev
-libgnutls-deb0-28
+libgnutlsxx28
 libgnutls28-dev
 libnet1-dev
 libpcap0.8

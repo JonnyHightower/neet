@@ -282,19 +282,20 @@ function apt-get-list {
 	local LIST="$1"
 	ERROR=0
 	for package in `cat "$LIST"`; do
-		if apt-cache policy $package 2>&1 | grep -q Installed:; then
-			continue
-		fi
-		echo " + Installing $package"
-		apt-get -y install $package >/dev/null 2>&1
-		ERR=$?
-		#echo -n "."
-		if [ $ERR -ne 0 ]; then
-			echo
-			echo "  ! There was a problem installing $package."
-			ERROR=1
+		if apt-cache policy $package 2>&1 | grep -q "Installed: (none)"; then
+			echo " + Installing $package"
+			apt-get -y install $package >/dev/null 2>&1
+			ERR=$?
+			#echo -n "."
+			if [ $ERR -ne 0 ]; then
+				echo
+				echo "  ! There was a problem installing $package."
+				ERROR=1
+			else
+				echo "   - OK"
+			fi
 		else
-			echo "  = OK"
+			continue
 		fi
 	done
 	echo
