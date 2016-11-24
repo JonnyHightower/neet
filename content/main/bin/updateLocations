@@ -32,7 +32,7 @@ echo "neet=$NEET" > "${CONFDIR}/locations"
 
 for bin in nmap amap tcptraceroute traceroute wget sslscan dig rpcclient net snmpwalk ruby java \
            ldapsearch medusa smbclient snmpget snmpset nmblookup rpcinfo xwd ntpdate ldapsearch \
-           openssl openvas-nasl; do
+           openssl openvas-nasl winexe; do
 
 	if type $bin >/dev/null 2>&1; then
 		SystemPath=`type $bin 2>/dev/null | awk {print'$3'}`
