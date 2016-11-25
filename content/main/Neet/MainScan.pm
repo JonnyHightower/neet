@@ -319,7 +319,7 @@ sub interfaceInfo {
 				$mac=$1;
 				next;
 			}
-			if ($line =~ /^\d:/){
+			if ($line =~ /^\d+:/){
 				$thisInterface=0;
 				last;
 			}
