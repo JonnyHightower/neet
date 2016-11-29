@@ -56,7 +56,7 @@ use JR::Parsers::OutputParser;
 use JR::Parsers::CLI;
 use JR::Parsers::Nmap;
 
-my $VERSION="1.2.5";
+my $VERSION="1.2.6";
 
 my $UID=`/usr/bin/id -u`; chomp $UID;
 if ($UID > 0){
@@ -71,14 +71,14 @@ if (!$ENV{'PWD'}){
 }
 
 # Command-line
-my $CLI=JR::Parsers::CLI->new('cB:boADIdkUhLldgpqQNxH:m@M@t@T@u@U@X@s:i:f@F@n@O@z');
+my $CLI=JR::Parsers::CLI->new('cB:boADIdkUhLldgpqQNxH:m@M@t@T@u@U@X@s:i:f@F@n@O@zr:');
 $CLI->LongShortMap ( 'debug'=>'D', 'budget'=>'B', 'nodns'=>'d', 'aix'=>'A', 'overlap'=>'o',
 							'help'=>'h', 'list-targets'=>'L', 'exclude-host'=>'X', 'exclude-tcp'=>'T', 'noautobudget'=>'b',
 							'exclude-udp'=>'U', 'include-tcp'=>'t', 'include-udp'=>'u', 'limited-patience'=>'l',
 							'host-list'=>'f', 'exclude-hosts'=>'F', 'speed'=>'s', 'kid-gloves'=>'k',
 							'intensity'=>'i','threads'=>'H','module'=>'m','disable-module'=>'M','pingscan'=>'p','internet'=>'I',
 							'nogsm'=>'g','noscan-named'=>'N','noscan-range'=>'n','exclude-os'=>'O',
-							'min-udp'=>'q', 'min-tcp'=>'Q' , 'no-auto'=>'x', 'connect'=>'c','update'=>'z');
+							'min-udp'=>'q', 'min-tcp'=>'Q' , 'results-dir'=>'r', 'no-auto'=>'x', 'connect'=>'c','update'=>'z');
 $CLI->Process(@ARGV);
 
 # In case the user wanted to run neet-update
@@ -101,6 +101,40 @@ if ($CLI->Got('z') && (-f "/opt/neet/bin/neet-update")){
 # Not updating.
 
 $0="Neet $VERSION initialising...";
+
+# Logging
+my $Log=Neet::Logging->new();
+
+# Allow the re-basing of results
+if ($CLI->Got('r')){
+	my $resultsBase=$CLI->Value('r');
+	if (! -d "$resultsBase"){
+		if (! mkdir $resultsBase){
+			$Log->Warn ("** ERROR: Couldn't create the specified directory.\n", 'PRINTONLY');
+			exit 1;
+		} else {
+			chdir($resultsBase);
+			$ENV{'PWD'}=`pwd`; chomp ($ENV{'PWD'});
+		}
+	} else {
+		print "\n";
+		$Log->Alert ("The directory \"$resultsBase\" already exists.\n",'PRINTONLY');
+		$Log->Info ("Options:\n\t1\tUse the existing \"$resultsBase\" directory\n",'PRINTONLY');
+		$Log->Info ("\t2\tUse the current directory: \"$ENV{'PWD'}\"\n",'PRINTONLY');
+		$Log->Info ("\tAny other key => Abort\n");
+		my $key=GetKey();
+		if ("$key" eq "1"){
+			$Log->OK ("Changing into \"$resultsBase\"\n",'PRINTONLY');
+			chdir($resultsBase);
+			$ENV{'PWD'}=`pwd`; chomp ($ENV{'PWD'});
+		} elsif ("$key" eq "2"){
+			$Log->OK ("Remaining in \"$ENV{'PWD'}\"\n",'PRINTONLY');
+		} else {
+			$Log->Warn ("Aborted by user\n",'PRINTONLY');
+			exit 0;
+		}
+	}
+}
 
 # Ignore these signals - we'll set up our own signal handling later....
 #$SIG{'__DIE__'}=sub{};
@@ -129,9 +163,15 @@ if (-f "$ENV{'HOME'}/.neet/vce.conf"){
 }
 
 my $Binaries=Config->new($BINARIES);
+my $MaxServiceDiscoveryThreads=$Config->GetVal("Threads.SDM");
 
-# Logging
-my $Log=Neet::Logging->new();
+# New scan object
+my $MainScan=Neet::MainScan->new($Config,$Binaries,$Log);
+
+my $help=0;
+if ($CLI->Got('h')){
+	usage();
+}
 
 # Sort out the colouring
 my $InverseVideo = $Config->GetVal("InverseVideo");
@@ -222,9 +262,6 @@ if ($Config->GetVal("NeetXTerminalAutoOpen") eq "1"){
 	}
 }
 
-# New scan object
-my $MainScan=Neet::MainScan->new($Config,$Binaries,$Log);
-my $MaxServiceDiscoveryThreads=$Config->GetVal("Threads.SDM");
 my $numPhases=$MainScan->Phases;
 my $CPUs=$MainScan->CPUs;
 
@@ -236,7 +273,6 @@ $MainScan->ControlDirectory($controlDirectory);
 $MainScan->CredentialManager(Neet::CredentialManager->new);
 
 # Program mode flags
-my $help=0;
 my $list=0;
 my $autoManageBudget=1;
 my $rungsms=1;
@@ -373,14 +409,14 @@ if (!($list || $help)){
  }
 
  if ($wantToResume){
-	undef($CLI); $CLI=JR::Parsers::CLI->new('cB:boADIdkUhLlgdpqQNxH:m@M@t@T@u@U@X@s:i:f@F@n@O@');
+	undef($CLI); $CLI=JR::Parsers::CLI->new('cB:boADIdkUhLlgdpqQNxH:m@M@t@T@u@U@X@s:i:f@F@n@O@r:');
 	$CLI->LongShortMap ( 'debug'=>'D', 'budget'=>'B', 'nodns'=>'d', 'aix'=>'A', 'overlap'=>'o',
 							'help'=>'h', 'list-targets'=>'L', 'exclude-host'=>'X', 'exclude-tcp'=>'T', 'noautobudget'=>'b',
 							'exclude-udp'=>'U', 'include-tcp'=>'t', 'include-udp'=>'u',  'limited-patience'=>'l',
 							'host-list'=>'f', 'exclude-hosts'=>'F', 'speed'=>'s', 'kid-gloves'=>'k',
 							'intensity'=>'i', 'threads'=>'H','module'=>'m','disable-module'=>'M','pingscan'=>'p','internet'=>'I',
 							'nogsm'=>'g','noscan-named'=>'N','noscan-range'=>'n','exclude-os'=>'O',
-							'min-udp'=>'q', 'min-tcp'=>'Q', 'no-auto'=>'x', 'connect'=>'c');
+							'min-udp'=>'q', 'min-tcp'=>'Q', 'results-dir'=>'r', 'no-auto'=>'x', 'connect'=>'c');
 
 	$CLI->Process(split " ", $MainScan->PreviousCommandLine);
 	$MainScan->Resumed(1);
@@ -1633,6 +1669,7 @@ Usage: neet [options] [<target range> [<target range> <target range>...]]
    Options:
 
 	-h      Print this help                                                                       [--help]
+	-r      Specify results directory. Default is to store results in the current directory.      [--results-dir]
 
 	[ Target HOST Specification ]
 
@@ -1690,7 +1727,10 @@ Usage: neet [options] [<target range> [<target range> <target range>...]]
 	See the man page for lots more information.
 ),'PRINTONLY');
 	print "\n";
-	$Log->Info ("Showed usage\n",'LOGONLY');
-	__exit ($help);
-
+	if ($help>1){
+		$Log->Info ("Showed usage\n",'LOGONLY');
+		__exit ($help);
+	} else {
+		exit ($help);
+	}
 }
