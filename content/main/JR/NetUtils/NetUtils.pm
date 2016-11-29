@@ -132,18 +132,27 @@ sub interfaceInfo {
 			next;
 		}
 		if ($thisInterface){
-			if ($line =~ /\sinet\s/){
-				$line =~ m/^\s+inet\s(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2})\s+brd\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s[\S\s]+$/;
-				$address=$1;
-				$broadcast=$2;
+			if ($line =~ /^\s{0,}inet\s/){
+				if ($line =~ /\speer\s/){
+					# Point to point link - No MAC, 32-bit address
+					$line =~ m/^\s{0,}inet\s(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s+peer\s+[\S\s]+$/;
+					$address=$1 . "/32";
+					$broadcast=$1;
+					$mac="";
+				} else {
+					# Standard network type addressing
+					$line =~ m/^\s{0,}inet\s(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\/\d{1,2})\s+brd\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\s[\S\s]+$/;
+					$address=$1;
+					$broadcast=$2;
+				}
 				next;
 			}
-			if ($line =~ /\slink\/ether\s/){
-				$line =~ m/^\s+link\/ether\s(\S+)\s+brd\s+[\S\s]+/;
+			if ($line =~ /^\s{0,}link\/ether\s/){
+				$line =~ m/^\s{0,}link\/ether\s(\S+)\s+brd\s+[\S\s]+/;
 				$mac=$1;
 				next;
 			}
-			if ($line =~ /^\d:/){
+			if ($line =~ /^\d+:/){
 				$thisInterface=0;
 				last;
 			}
